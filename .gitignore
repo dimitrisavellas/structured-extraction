@@ -1,0 +1,24 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pipeline-generated artifacts
+intermediate/
+output/
+markdown/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Packaging / caches
+*.egg-info/
+.pytest_cache/
+
