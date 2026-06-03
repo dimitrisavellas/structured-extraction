@@ -1,0 +1,95 @@
+You are a document analysis expert. Your task is to discover the extraction schema for this document.
+
+## Context
+
+The user wants to extract the following keys from this document:
+{{ user_keys }}
+{% if key_synonyms %}
+These keys have equivalent forms found in this document (an acronym and its spelled-out phrase refer to the SAME quantity — treat them as one key, and mention the alternate form in the field's description so the extractor recognizes both):
+{{ key_synonyms }}
+{% endif %}
+
+## Domain Vocabulary
+
+These are the most relevant terms found in this document (use these to understand the domain and recognize synonyms/abbreviations):
+{{ vocab_terms }}
+
+## Relevant Document Sections
+
+The following sections were identified as potentially containing the desired values:
+
+{{ section_content }}
+
+## Document Preview
+
+{{ document_preview }}
+
+---
+
+## Instructions
+
+For each user key, define a schema field. The field name MUST be the user's key converted to a valid Python identifier (lowercase, spaces replaced with underscores, special characters removed). For example:
+- "Revenue" → "revenue"
+- "Net Income" → "net_income"
+- "Supply Current" → "supply_current"
+
+Each field definition must include:
+1. **description**: Describe what the field represents, where to find it, and note any synonyms or abbreviations from the domain vocabulary. The description should help the extraction model locate the right values.
+2. **type**: Always "list" — each key may appear in multiple places (different tables, categories, conditions, columns).
+3. **fields**: An object defining the sub-fields for each record in this field's list. Tailor the sub-fields to what this specific field actually needs based on the document content. Every record MUST include a `value` field and a `metadata` field. Beyond that, only add sub-fields that are meaningful for this field. Common patterns:
+   - Column-labeled specs: "qualifier" (column label like Min/Typ/Max), "condition" (operating condition), "value", "metadata"
+   - Parallel variant columns: the SAME parameter repeated across several side-by-side column groups — each group a distinct product variant, part-number family, grade, or reporting period sitting above its own value or Min/Typ/Max sub-columns. Add a "differentiator" sub-field that records which group a value came from (the group's header text, e.g. a part number like "LT1167AI/LT1167AI-1", a grade, or "FY2024"), alongside "qualifier"/"condition". Name this sub-field after what the groups represent when they carry an explicit label (e.g. headers reading "AR Grade"/"BR Grade" → "grade"); otherwise call it "differentiator".
+   - Categorical comparisons: "category" (the row label or group), "value", "metadata"
+   - Simple single-value lookups: just "value", "metadata"
+   - Multi-column rows: each numeric column becomes its own sub-field (e.g., `smw`, `smfcf`)
+   Each sub-field needs a **name**, **type** ("string", "number", or "any"), **description**, and optionally **unit** (the unit of measurement for this sub-field). Always include the unit for any numeric sub-field that carries a physical quantity.
+
+**Important**: Only list synonyms that refer to the EXACT same measured quantity. Terms like "Discrepancy" vs "Difference from observed" may sound similar but can refer to different calculations in different tables. Only include a synonym if the value would be interchangeable with the user's key in the same context.
+
+In addition to the per-key schema fields, include a top-level `_document_type` key with a short free-form label describing what kind of document this is (e.g. "op-amp datasheet", "quarterly earnings report", "experimental physics paper", "soil survey"). Derive it from the vocabulary and document preview — do not pick from a fixed list.
+
+Respond with ONLY a JSON object. No explanation, no markdown fences. Example:
+
+{
+  "_document_type": "instrumentation amplifier datasheet",
+  "temperature": {
+    "type": "list",
+    "description": "Temperature readings from the measurement table. May appear as 'Temp', 'Temperature', 'T'.",
+    "fields": {
+      "qualifier": {"type": "string", "description": "Column label: 'minimum', 'typical', or 'maximum'"},
+      "condition": {"type": "string", "description": "Condition or location (e.g., 'outdoor', 'indoor')"},
+      "value": {"type": "any", "description": "Temperature value", "unit": "°C"},
+      "metadata": {"type": "object", "description": "Source and provenance"}
+    }
+  },
+  "common_mode_rejection": {
+    "type": "list",
+    "description": "CMRR spec repeated across several part-number column groups in the characteristics table.",
+    "fields": {
+      "differentiator": {"type": "string", "description": "Which variant column group the value sits under — the group's header, e.g. a part number 'LT1167AI/LT1167AI-1', a grade, or a reporting period"},
+      "qualifier": {"type": "string", "description": "Column label: 'min', 'typ', or 'max'"},
+      "condition": {"type": "string", "description": "Operating condition (e.g., 'G = 10')"},
+      "value": {"type": "any", "description": "CMRR value", "unit": "dB"},
+      "metadata": {"type": "object", "description": "Source and provenance"}
+    }
+  },
+  "survival_rate": {
+    "type": "list",
+    "description": "Survival rate comparison across categories from the results table.",
+    "fields": {
+      "category": {"type": "string", "description": "Group or model name (e.g., 'Control', 'Treatment A')"},
+      "value": {"type": "any", "description": "Survival rate", "unit": "%"},
+      "metadata": {"type": "object", "description": "Source and provenance"}
+    }
+  },
+  "soil_parameters": {
+    "type": "list",
+    "description": "Soil classification parameters from the properties table. Each row is a soil type.",
+    "fields": {
+      "value": {"type": "string", "description": "Soil type name (e.g., 'Medium loam')"},
+      "smw": {"type": "number", "description": "Wilting point", "unit": "cm³ cm⁻³"},
+      "smfcf": {"type": "number", "description": "Field capacity", "unit": "cm³ cm⁻³"},
+      "metadata": {"type": "object", "description": "Source and provenance"}
+    }
+  }
+}

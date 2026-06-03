@@ -1,0 +1,144 @@
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+from . import config
+from .convert import convert_pdf
+from .vocab import extract_vocab
+from .classify_sections import classify_sections
+from .tables import process_tables, refine_matched_tables
+from .embed import embed_sections_and_keys
+from .search import search
+from .extract import extract_parallel
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("main")
+
+
+def process_single_pdf(pdf_path, user_keys):
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        logger.error(f"PDF not found: {pdf_path}")
+        return None
+
+    stem = pdf_path.stem
+    int_dir = Path(config.INTERMEDIATE_DIR)
+    logger.info(f"=== Processing {pdf_path.name} ===")
+
+    md_path = convert_pdf(str(pdf_path))
+    if md_path is None:
+        logger.error(f"Conversion failed for {pdf_path.name}")
+        return None
+
+    extract_vocab(md_path)
+    classify_sections(stem)
+
+    process_tables(
+        str(int_dir / f"{stem}_sections.json"),
+        pdf_path=str(pdf_path),
+    )
+
+    tables_file = int_dir / f"{stem}_tables.json"
+    embed_sections_and_keys(
+        sections_path=str(int_dir / f"{stem}_sections.json"),
+        tables_path=str(tables_file) if tables_file.exists() else None,
+        vocab_path=str(int_dir / f"{stem}_vocab.json"),
+        user_keys=user_keys,
+    )
+
+    matches = search(
+        section_embeddings_path=str(int_dir / f"{stem}_section_embeddings.npy"),
+        key_embeddings_path=str(int_dir / f"{stem}_key_embeddings.npy"),
+        section_texts_path=str(int_dir / f"{stem}_section_texts.json"),
+        key_texts_path=str(int_dir / f"{stem}_key_texts.json"),
+        sections_path=str(int_dir / f"{stem}_sections.json"),
+        original_keys=user_keys,
+        row_map_path=str(int_dir / f"{stem}_row_map.json"),
+    )
+
+    # refine matched complex tables with vision model
+    matched_idxs = set()
+    for key_matches in matches.values():
+        for match in key_matches:
+            matched_idxs.add(match.get("section_idx", 0))
+
+    if matched_idxs and tables_file.exists():
+        logger.info("Refining matched complex tables...")
+        refine_matched_tables(str(tables_file), matched_idxs)
+
+    results = extract_parallel(
+        matches_path=str(int_dir / f"{stem}_matches.json"),
+        sections_path=str(int_dir / f"{stem}_sections.json"),
+        vocab_path=str(int_dir / f"{stem}_vocab.json"),
+        user_keys=user_keys,
+        markdown_path=str(Path(config.MARKDOWN_DIR) / f"{stem}.md"),
+        tables_path=str(tables_file) if tables_file.exists() else None,
+    )
+
+    logger.info(f"=== Done with {pdf_path.name} ===")
+    return results
+
+
+def process_batch(pdf_dir, user_keys):
+    pdf_dir = Path(pdf_dir)
+    if not pdf_dir.exists():
+        logger.error(f"Directory not found: {pdf_dir}")
+        return []
+
+    pdfs = sorted(pdf_dir.glob("*.pdf"))
+    if not pdfs:
+        logger.error(f"No PDFs found in {pdf_dir}")
+        return []
+
+    logger.info(f"Found {len(pdfs)} PDFs")
+    results = []
+    for pdf in pdfs:
+        try:
+            result = process_single_pdf(str(pdf), user_keys)
+            if result:
+                results.append(result)
+        except Exception as e:
+            logger.error(f"Failed {pdf.name}: {e}")
+
+    logger.info(f"Processed {len(results)}/{len(pdfs)} files")
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Document extraction pipeline")
+    parser.add_argument("--pdf", help="Path to a single PDF")
+    parser.add_argument("--pdf-dir", help="Path to directory of PDFs")
+    parser.add_argument("--keys", nargs="+", help="Keys to extract")
+    parser.add_argument("--output", default=config.OUTPUT_DIR)
+    args = parser.parse_args()
+
+    if not args.pdf and not args.pdf_dir:
+        parser.error("Either --pdf or --pdf-dir is required")
+
+    user_keys = args.keys
+    if not user_keys:
+        print("Enter keys to extract (comma-separated):")
+        raw = input("> ").strip()
+        user_keys = [k.strip() for k in raw.split(",") if k.strip()]
+        if not user_keys:
+            print("No keys provided.")
+            sys.exit(1)
+
+    config.OUTPUT_DIR = args.output
+
+    if args.pdf:
+        result = process_single_pdf(args.pdf, user_keys)
+        if result:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("Extraction failed.")
+            sys.exit(1)
+    else:
+        results = process_batch(args.pdf_dir, user_keys)
+        print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
+
+
+if __name__ == "__main__":
+    main()
