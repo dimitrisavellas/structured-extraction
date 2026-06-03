@@ -2,15 +2,14 @@ import argparse
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
-
 import instructor
 from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
-
 from . import config
 from .table_filter import filter_html_table, filter_markdown_table
 from .abbreviations import synonyms_for_keys
@@ -336,8 +335,6 @@ def _model_slug(model_name):
 
 def extract_parallel(matches_path, sections_path, vocab_path, user_keys,
                      markdown_path=None, tables_path=None):
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     stem = Path(matches_path).stem.replace("_matches", "")
     out_dir = Path(config.OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)

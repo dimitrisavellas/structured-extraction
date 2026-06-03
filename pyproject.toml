@@ -32,6 +32,7 @@ dependencies = [
     "pymupdf",
     "html5lib",
     "einops",
+    "Levenshtein",
 ]
 
 [project.optional-dependencies]

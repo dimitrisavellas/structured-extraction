@@ -84,22 +84,21 @@ def search(section_embeddings_path, key_embeddings_path, section_texts_path,
                 row_idx = idx - num_secs
                 row_info = rows[row_idx] if row_idx < len(rows) else {}
                 sec_idx = row_info.get("section_idx", idx)
-                match = {
-                    "section_idx": int(sec_idx),
-                    "similarity": round(score, 4),
-                    "content_preview": preview,
+            else:
+                sec_idx = idx
+
+            match = {
+                "section_idx": int(sec_idx),
+                "similarity": round(score, 4),
+                "content_preview": preview,
+            }
+            if is_row:
+                match.update({
                     "is_row": True,
                     "row_text": row_info.get("row_text", ""),
                     "row_number": row_info.get("row_number"),
                     "group_header": row_info.get("group_header", ""),
-                }
-            else:
-                sec_idx = idx
-                match = {
-                    "section_idx": int(sec_idx),
-                    "similarity": round(score, 4),
-                    "content_preview": preview,
-                }
+                })
 
             if sec_idx < len(sections):
                 match["type"] = sections[sec_idx].get("type", "unknown")

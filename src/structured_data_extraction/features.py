@@ -1,9 +1,3 @@
-"""
-Feature recipe for the section classifier. This is the single source of truth
-the inference path imports from.
-
-Feature layout: [ word-tfidf | char-tfidf | 30 regex | docling-ctx ]
-"""
 import re
 
 import numpy as np
@@ -19,6 +13,9 @@ UNITS = set("ΩμµΩ°±")
 HASH_RE = re.compile(r"^(#{1,6})\s")
 FIG_TABLE_PREFIX_RE = re.compile(r"^(Figure|Fig\.|Table|Tab\.)\s+[A-Z0-9][A-Z0-9\-\.]*[\.\:]\s*", re.I)
 SENTENCE_BOUNDARY_RE = re.compile(r"[a-z\)\"\']\.\s+[A-Z]")
+NUM_LIST_RE = re.compile(r"^\d+[\.\)]\s")
+DASH_RE = re.compile(r"^[-–—]\s")
+PAREN_RE = re.compile(r"\([^)]{1,40}\)")
 
 
 def _sentence_count(text):
@@ -38,12 +35,12 @@ def regex_features(text):
     hash_depth = len(hash_m.group(1)) if hash_m else 0
     return [
         float("|" in text), float("\n" in text), float(text.count("\n") > 2),
-        float(bool(re.match(r"^\d+[\.\)]\s", text))), float(bool(BULLET_RE.match(text))),
-        float(bool(N_BULLET_RE.match(text))), float(bool(re.match(r"^[-–—]\s", text))),
+        float(bool(NUM_LIST_RE.match(text))), float(bool(BULLET_RE.match(text))),
+        float(bool(N_BULLET_RE.match(text))), float(bool(DASH_RE.match(text))),
         float(bool(FIG_RE.match(text))), float(n < 80), float(n < 40), float(n < 20),
         float(text.endswith(".")), float(text.endswith(":")),
         float(text[-1] in ".:;?!") if text else 0.0, float(text.count(".") <= 1),
-        float(bool(re.search(r"\([^)]{1,40}\)", text))),
+        float(bool(PAREN_RE.search(text))),
         float(sum(1 for w in words[:3] if w.isupper() and len(w) > 1)),
         float(text.isupper() and any(c.isalpha() for c in text)),
         upper_ratio, title_words / wc, float(text[0].isupper()) if text else 0.0,

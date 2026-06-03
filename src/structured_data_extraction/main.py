@@ -25,6 +25,9 @@ def process_single_pdf(pdf_path, user_keys):
 
     stem = pdf_path.stem
     int_dir = Path(config.INTERMEDIATE_DIR)
+    sections_path = int_dir / f"{stem}_sections.json"
+    vocab_path = int_dir / f"{stem}_vocab.json"
+    tables_file = int_dir / f"{stem}_tables.json"
     logger.info(f"=== Processing {pdf_path.name} ===")
 
     md_path = convert_pdf(str(pdf_path))
@@ -35,16 +38,12 @@ def process_single_pdf(pdf_path, user_keys):
     extract_vocab(md_path)
     classify_sections(stem)
 
-    process_tables(
-        str(int_dir / f"{stem}_sections.json"),
-        pdf_path=str(pdf_path),
-    )
+    process_tables(str(sections_path), pdf_path=str(pdf_path))
 
-    tables_file = int_dir / f"{stem}_tables.json"
     embed_sections_and_keys(
-        sections_path=str(int_dir / f"{stem}_sections.json"),
+        sections_path=str(sections_path),
         tables_path=str(tables_file) if tables_file.exists() else None,
-        vocab_path=str(int_dir / f"{stem}_vocab.json"),
+        vocab_path=str(vocab_path),
         user_keys=user_keys,
     )
 
@@ -53,16 +52,17 @@ def process_single_pdf(pdf_path, user_keys):
         key_embeddings_path=str(int_dir / f"{stem}_key_embeddings.npy"),
         section_texts_path=str(int_dir / f"{stem}_section_texts.json"),
         key_texts_path=str(int_dir / f"{stem}_key_texts.json"),
-        sections_path=str(int_dir / f"{stem}_sections.json"),
+        sections_path=str(sections_path),
         original_keys=user_keys,
         row_map_path=str(int_dir / f"{stem}_row_map.json"),
     )
 
     # refine matched complex tables with vision model
-    matched_idxs = set()
-    for key_matches in matches.values():
-        for match in key_matches:
-            matched_idxs.add(match.get("section_idx", 0))
+    matched_idxs = {
+        match.get("section_idx", 0)
+        for key_matches in matches.values()
+        for match in key_matches
+    }
 
     if matched_idxs and tables_file.exists():
         logger.info("Refining matched complex tables...")
@@ -70,8 +70,8 @@ def process_single_pdf(pdf_path, user_keys):
 
     results = extract_parallel(
         matches_path=str(int_dir / f"{stem}_matches.json"),
-        sections_path=str(int_dir / f"{stem}_sections.json"),
-        vocab_path=str(int_dir / f"{stem}_vocab.json"),
+        sections_path=str(sections_path),
+        vocab_path=str(vocab_path),
         user_keys=user_keys,
         markdown_path=str(Path(config.MARKDOWN_DIR) / f"{stem}.md"),
         tables_path=str(tables_file) if tables_file.exists() else None,

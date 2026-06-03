@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+from collections import Counter
 from pathlib import Path
 from . import config
 from .classify import SectionClassifier
@@ -29,18 +30,17 @@ def classify_sections(pdf_stem):
                                 "Expected the trained section_classifier model to ship with the project.")
 
     # only classify items that have text
-    text_chunks = []
-    for i, item in enumerate(items):
-        text = (item.get("text") or "").strip()
-        if not text:
-            continue
-        text_chunks.append({
+    text_chunks = [
+        {
             "section_id": i,
             "docling_label": item.get("label", "text"),
             "text": text,
             "page": item.get("page"),
             "bbox": item.get("bbox"),
-        })
+        }
+        for i, item in enumerate(items)
+        if (text := (item.get("text") or "").strip())
+    ]
 
     classifier = SectionClassifier(model_dir=str(model_dir))
     predicted = classifier.classify(text_chunks)
@@ -81,7 +81,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = classify_sections(args.stem)
-    counts = {}
-    for s in result:
-        counts[s["type"]] = counts.get(s["type"], 0) + 1
-    print(f"Classified {len(result)} sections: {counts}")
+    counts = Counter(s["type"] for s in result)
+    print(f"Classified {len(result)} sections: {dict(counts)}")

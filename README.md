@@ -60,7 +60,8 @@ general.
   model from it on the fly, and hands it to [Instructor](https://python.useinstructor.com/)
   so the model is forced to return validated structured output instead of free prose.
 - **Several models vote.** Extraction runs across a few LLMs in parallel and the results
-  are de-duplicated, preferring table-sourced records over free-text ones. 
+  are de-duplicated, preferring table-sourced records over free-text ones. After the fact,
+  `rater.py` scores how much the models agreed and attaches a confidence to every record.
 
 ---
 
@@ -154,6 +155,16 @@ one understands `rowspan` so merged first-column cells stay attached to their gr
 ("Common Mode Rejection Ratio (CMRR)") and builds a synonym map, so a key typed either way
 matches. Again: derived from the document, not hardcoded.
 
+**`rater.py`** : a post-extraction analysis, *not* part of the pipeline yet. It
+reads every `output/*.json`, groups the records by `(file, key)` across the models that
+produced them, and scores agreement. Two records from different models count as the **same
+fact** when their value *and* unit match exactly and their descriptor text (qualifier,
+condition…) is at least `THRESHOLD` (0.85) similar by Levenshtein ratio —> fuzzy on the
+wording because models phrase conditions differently (`TA = −40°C` vs `T_A = -40°C`), exact
+on the number. Each fact gets a **confidence** = how many models found it ÷ number of models
+(3/3 → 1.0, 2/3 → 0.67…), and it prints pairwise **Cohen's kappa** as a global inter-rater
+agreement metric.
+
 ### Templates
 
 **`templates/schema_discovery.j2`** : prompt that asks the LLM for each key's field shape
@@ -230,6 +241,20 @@ python -m structured_data_extraction.extract --stem 1167fc --keys gain CMRR
 ```
 
 Every step is runnable standalone this way (`-m ...search`, `-m ...embed`, etc.).
+
+
+### Scoring model agreement (confidence)
+
+Once extraction has written the per-model outputs to `output/`, score how much the models
+agreed on each value:
+
+```bash
+python -m structured_data_extraction.rater
+```
+
+It reads everything in `output/`, prints per-key confidence (how many facts all the models
+found vs. only some), lists the disagreements, and reports pairwise Cohen's kappa. No
+arguments — it just analyses whatever outputs are present.
 
 
 ## License

@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 import fitz
 from openai import OpenAI
-
 from . import config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -26,11 +25,8 @@ def score_table_complexity(content):
     # ragged column counts = merged cells
     pipe_rows = [line for line in lines if "|" in line]
     if pipe_rows:
-        col_counts = []
-        for row in pipe_rows:
-            cols = [c.strip() for c in row.split("|") if c.strip()]
-            col_counts.append(len(cols))
-        if len(set(col_counts)) > 1:
+        col_counts = {len([c for c in row.split("|") if c.strip()]) for row in pipe_rows}
+        if len(col_counts) > 1:
             score += 0.2
 
         for row in pipe_rows[:5]:
@@ -48,27 +44,21 @@ def score_table_complexity(content):
     return min(score, 1.0)
 
 
-def _render_page(pdf_path, page_number, dpi=200):
-    doc = fitz.open(pdf_path)
-    idx = max(0, min(page_number - 1, len(doc) - 1))
-    pix = doc[idx].get_pixmap(dpi=dpi)
-    b64 = base64.b64encode(pix.tobytes("png")).decode("utf-8")
-    doc.close()
-    return b64
-
-
-def _render_region(pdf_path, page_number, bbox, dpi=200):
+def _render(pdf_path, page_number, bbox=None, dpi=200):
+    # render a whole page, or just the bbox region if one is given
     doc = fitz.open(pdf_path)
     idx = max(0, min(page_number - 1, len(doc) - 1))
     page = doc[idx]
-    h = page.rect.height
 
-    # docling uses BOTTOMLEFT origin, PyMuPDF uses top-left
-    origin = bbox.get("coord_origin", "BOTTOMLEFT")
-    if "BOTTOM" in origin:
-        clip = fitz.Rect(bbox["l"], h - bbox["t"], bbox["r"], h - bbox["b"])
-    else:
-        clip = fitz.Rect(bbox["l"], bbox["t"], bbox["r"], bbox["b"])
+    clip = None
+    if bbox:
+        h = page.rect.height
+        # docling uses BOTTOMLEFT origin, PyMuPDF uses top-left
+        origin = bbox.get("coord_origin", "BOTTOMLEFT")
+        if "BOTTOM" in origin:
+            clip = fitz.Rect(bbox["l"], h - bbox["t"], bbox["r"], h - bbox["b"])
+        else:
+            clip = fitz.Rect(bbox["l"], bbox["t"], bbox["r"], bbox["b"])
 
     pix = page.get_pixmap(dpi=dpi, clip=clip)
     b64 = base64.b64encode(pix.tobytes("png")).decode("utf-8")
@@ -143,7 +133,7 @@ def process_tables(sections_path, pdf_path=None):
         return json.loads(out_path.read_text(encoding="utf-8"))
 
     sections = json.loads(sections_path.read_text(encoding="utf-8"))
-    table_sections = [s for s in sections if s["type"] == "table"]
+    table_sections = [(i, s) for i, s in enumerate(sections) if s["type"] == "table"]
 
     if not table_sections:
         logger.info("No tables found")
@@ -160,7 +150,7 @@ def process_tables(sections_path, pdf_path=None):
     logger.info(f"Scoring {len(table_sections)} tables...")
     results = []
 
-    for i, section in enumerate(table_sections):
+    for i, (section_idx, section) in enumerate(table_sections):
         content = section["content"]
         complexity = score_table_complexity(content)
         route = "complex" if complexity >= config.TABLE_COMPLEXITY_THRESHOLD else "simple"
@@ -169,7 +159,7 @@ def process_tables(sections_path, pdf_path=None):
         logger.info(f"  Table {i}: complexity={complexity:.2f}, route={route}")
 
         results.append({
-            "section_idx": sections.index(section),
+            "section_idx": section_idx,
             "complexity_score": round(complexity, 4),
             "route": route,
             "page": page,
@@ -194,10 +184,7 @@ def _refine_one_table(table):
     used_vision = False
     if pdf_path and Path(pdf_path).exists():
         try:
-            if bbox:
-                image_b64 = _render_region(pdf_path, page, bbox)
-            else:
-                image_b64 = _render_page(pdf_path, page)
+            image_b64 = _render(pdf_path, page, bbox)
             html = _call_vision_model(image_b64, content)
             used_vision = True
         except Exception as e:
