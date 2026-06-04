@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import re
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,7 +52,7 @@ def _build_extraction_model(schema, user_keys):
     field_defs = {}
 
     for key in user_keys:
-        field_name = re.sub(r'[^a-z0-9_]', '_', key.lower())
+        field_name = re.sub(r'[^a-z0-9_]', '_', unicodedata.normalize("NFKC", key).lower())
         entry = schema.get(field_name)
         if not isinstance(entry, dict):
             entry = {}
