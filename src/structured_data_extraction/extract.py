@@ -66,6 +66,8 @@ def _build_extraction_model(schema, user_keys):
         sub_fields = {
             "metadata": (ExtractionMetadata, Field(default_factory=ExtractionMetadata)),
         }
+
+        has_unit_field = "unit" in fields_spec
         for sub_name, sub_def in fields_spec.items():
             if sub_name == "metadata":
                 continue
@@ -73,7 +75,7 @@ def _build_extraction_model(schema, user_keys):
             sub_desc = sub_def.get("description", "")
             default = "" if field_type is str else None
             sub_fields[sub_name] = (field_type, Field(default=default, description=sub_desc))
-            if sub_def.get("unit"):
+            if sub_def.get("unit") and not has_unit_field:
                 sub_fields[f"{sub_name}_unit"] = (str, Field(default="", description=f"Unit for {sub_name}"))
 
         record_model = create_model(f"{field_name}_Record", **sub_fields)
@@ -194,7 +196,7 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, row_match
     resp = client.chat.completions.create(
         model=config.OLLAMA_SCHEMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1,
+        temperature=0,
     )
     raw = strip_code_fence(resp.choices[0].message.content.strip())
 

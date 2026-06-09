@@ -1,8 +1,8 @@
 ## work in progress, not yet ready for use
 import json
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
-import Levenshtein
+from rapidfuzz import fuzz
 from sklearn.metrics import cohen_kappa_score
 from . import config
 
@@ -23,34 +23,33 @@ def to_number(val):
 class Record:
     def __init__(self, model, data):
         self.model = model
-        self.value = {}
-        self.unit = {}
-        self.text = {}
+        self.exact = {}  
+        self.text = {}   
         for key in sorted(data):
             val = data[key]
             if key == "metadata":
                 continue
             elif key == "unit" or key.endswith("_unit"):
-                self.unit[key] = str(val).strip()
+                self.exact[key] = str(val).strip()
             elif key == "value" or isinstance(val, (int, float)):
-                self.value[key] = to_number(val)
+                self.exact[key] = to_number(val)
             else:
                 self.text[key] = str(val)
 
     @property
-    def descriptor(self):
-
-        return " ".join(self.text[k] for k in sorted(self.text) if self.text[k])
+    def fields(self):
+        # the original schema fields of this record, sorted
+        merged = {**self.exact, **self.text}
+        return {k: merged[k] for k in sorted(merged)}
 
     def matches(self, other):
-
-        if self.value != other.value or self.unit != other.unit:
+        if self.exact != other.exact:
             return False
+        for key, val in self.text.items():
+            ov = other.text.get(key, "")
 
-        for key in self.text:
-            if key in other.text and self.text[key] and other.text[key]:
-                if Levenshtein.ratio(self.text[key], other.text[key], processor=normalize) < THRESHOLD:
-                    return False
+            if val and ov and fuzz.ratio(val, ov, processor=normalize) < THRESHOLD * 100:
+                return False
         return True
 
 
@@ -60,9 +59,6 @@ class Records:
 
     def add(self, model, data):
         self.by_model[model].append(Record(model, data))
-
-    def count(self, model):
-        return len(self.by_model[model])
 
     def cluster(self):
         pool = [r for records in self.by_model.values() for r in records]
@@ -85,9 +81,12 @@ class Records:
 
 def load():
     strata = defaultdict(Records)
-    files = sorted(Path(config.OUTPUT_DIR).glob("*.json"))
-    for f in files:
+    loaded = 0
+    for f in sorted(Path(config.OUTPUT_DIR).glob("*.json")):
         ex = json.loads(f.read_text(encoding="utf-8"))
+        if ex.get("type") != "ExtractionResult":
+            continue 
+        loaded += 1
         file = ex["provenance"]["source_file"]
         model = ex["provenance"]["models"]["extraction"]
         for key in ex["provenance"]["schema_fields"]:
@@ -96,8 +95,50 @@ def load():
                 continue
             for row in ex[key]:
                 strata[(file, key)].add(model, row)
-    print(f"loaded {len(files)} files")
+    print(f"loaded {loaded} files")
     return strata
+
+
+def fact_entry(fact, n):
+    r = next(iter(fact.values()))
+    return {"confidence": round(len(fact) / n, 2), "models": sorted(fact), **r.fields}
+
+
+def agreement(all_facts, raters):
+    # pairwise Cohen's kappa over presence/absence of every fact
+    present = {m: [1 if m in fact else 0 for fact in all_facts] for m in raters}
+    rows = []
+    for i, a in enumerate(raters):
+        for b in raters[i + 1:]:
+            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(all_facts)
+            if len(set(present[a] + present[b])) < 2:
+                # both raters gave the same answer to every fact -> kappa is undefined
+                kappa = "n/a (no disagreement)"
+            else:
+                kappa = round(cohen_kappa_score(present[a], present[b], labels=[0, 1]), 3)
+            rows.append({"raters": [a, b], "kappa": kappa, "agreement": round(agree, 4)})
+    return rows
+
+
+def build_report(file, file_strata, raters):
+    fields = {}
+    all_facts = []
+    for key, records in sorted(file_strata.items()):
+        n = len(records.by_model)
+        facts = records.cluster()
+        all_facts += facts
+        full = sum(len(fact) == n for fact in facts)
+        entries = [fact_entry(fact, n) for fact in facts]
+        fields[key] = {"facts": len(facts), "full_agreement": full, "facts_list": entries}
+
+    report = {"source_file": file, "raters": raters, "fields": fields}
+    if all_facts:
+        report["agreement"] = agreement(all_facts, raters)
+        print(f"\n[{file}] inter-rater agreement over {len(all_facts)} facts:")
+        for row in report["agreement"]:
+            a, b = row["raters"]
+            print(f"  {a} ↔ {b}: kappa={row['kappa']}, agreement={row['agreement']:.1%}")
+    return report
 
 
 def main():
@@ -107,42 +148,16 @@ def main():
         return
 
     raters = config.EXTRACTION_MODELS[:3]
-    print(f"Raters: {', '.join(raters)}")
 
-    counts = Counter()
-    for records in strata.values():
-        for model in records.by_model:
-            counts[model] += records.count(model)
-    for model, count in counts.items():
-        print(f"{model}: {count} records")
+    by_file = defaultdict(dict)
+    for (file, key), records in strata.items():
+        by_file[file][key] = records
 
-    # confidence per fact = how many models found it
-    all_facts = []
-    for (file, key), records in sorted(strata.items()):
-        n = len(records.by_model)
-        facts = records.cluster()
-        all_facts += facts
-        full = sum(1 for fact in facts if len(fact) == n)
-        print(f"\n[{file}] {key}: {len(facts)} facts | full agreement: {full}/{len(facts)}")
-        for fact in facts:
-            if len(fact) < n:
-                r = next(iter(fact.values()))
-                models = ", ".join(sorted(fact))
-                print(f"    conf={len(fact) / n:.2f}  {r.descriptor!r} {r.value} {r.unit} — {models}")
-
-    # pairwise Cohen's kappa over presence/absence of every fact
-    present = {m: [1 if m in fact else 0 for fact in all_facts] for m in raters}
-    print(f"\nInter-rater agreement over {len(all_facts)} facts:")
-    for i, a in enumerate(raters):
-        for b in raters[i + 1:]:
-            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(all_facts)
-            if len(set(present[a] + present[b])) < 2:
-                # both raters gave the same answer to every fact -> kappa is undefined
-                kappa = "n/a (no disagreement)"
-            else:
-                k = cohen_kappa_score(present[a], present[b], labels=[0, 1])
-                kappa = f"{k:.3f}"
-            print(f"  {a} ↔ {b}: kappa={kappa}, agreement={agree:.1%}")
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    for file, file_strata in sorted(by_file.items()):
+        report = build_report(file, file_strata, raters)
+        out = config.OUTPUT_DIR / f"{Path(file).stem}_rating.json"
+        out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 if __name__ == "__main__":

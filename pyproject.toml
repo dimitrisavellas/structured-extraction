@@ -32,7 +32,7 @@ dependencies = [
     "pymupdf",
     "html5lib",
     "einops",
-    "Levenshtein",
+    "rapidfuzz",
 ]
 
 [project.optional-dependencies]

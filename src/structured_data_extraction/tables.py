@@ -3,6 +3,7 @@ import concurrent.futures
 import json
 import logging
 import re
+from collections import Counter
 from pathlib import Path
 import fitz
 from openai import OpenAI
@@ -12,34 +13,46 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
-def score_table_complexity(content):
-    score = 0.0
-    lines = content.split("\n")
-    if not lines:
+def _ramp(x, lo, hi):
+    # 0 below lo, 1 above hi, linear in between
+    if x <= lo:
         return 0.0
+    if x >= hi:
+        return 1.0
+    return (x - lo) / (hi - lo)
 
-    for marker in ["colspan", "rowspan", "<figure", "<img", "nested"]:
-        if marker in content.lower():
-            score += 0.15
 
-    # ragged column counts = merged cells
-    pipe_rows = [line for line in lines if "|" in line]
+def score_table_complexity(content):
+
+    text = content.lower()
+    score = sum(0.15 for m in ("colspan", "rowspan", "<figure", "<img", "nested") if m in text)
+
+    pipe_rows = [line for line in content.split("\n") if "|" in line]
     if pipe_rows:
-        col_counts = {len([c for c in row.split("|") if c.strip()]) for row in pipe_rows}
-        if len(col_counts) > 1:
-            score += 0.2
+        delims = [row.count("|") for row in pipe_rows]
+        mode = Counter(delims).most_common(1)[0][0]
 
-        for row in pipe_rows[:5]:
-            cells = [c.strip() for c in row.split("|") if c.strip()]
-            for cell in cells:
-                if "\n" in cell or len(cell) > 100:
-                    score += 0.05
-                    break
+        # broken row structure: rows off the modal delimiter count
+        ragged = sum(1 for d in delims if d != mode) / len(delims)
 
-    for pattern in [r"\d+\.\d+[eE][+-]?\d+", r"±", r"×10"]:
-        if re.search(pattern, content):
-            score += 0.1
-            break
+        # sparsity + hierarchy over data rows (separators skipped)
+        data = []
+        for row in pipe_rows:
+            inner = [c.strip() for c in row.split("|")[1:-1]]
+            if inner and all(set(c) <= {"-", ":", " ", ""} for c in inner):
+                continue
+            data.append(inner)
+        cells = sum(len(r) for r in data)
+        empty = sum(1 for r in data for c in r if not c)
+        sparsity = empty / cells if cells else 0.0
+        group_rows = sum(1 for r in data if r and r[0] and not any(r[1:]))
+        hierarchy = group_rows / len(data) if data else 0.0
+        ncols = max(mode - 1, 1)
+
+        score += _ramp(sparsity, 0.15, 0.60) * 0.40   # sparse grid (dominant)
+        score += ragged * 0.30                         # broken rows
+        score += min(hierarchy / 0.30, 1.0) * 0.20     # nested groups
+        score += _ramp(ncols, 4, 12) * 0.10            # wide tables
 
     return min(score, 1.0)
 
@@ -153,15 +166,13 @@ def process_tables(sections_path, pdf_path=None):
     for i, (section_idx, section) in enumerate(table_sections):
         content = section["content"]
         complexity = score_table_complexity(content)
-        route = "complex" if complexity >= config.TABLE_COMPLEXITY_THRESHOLD else "simple"
         page = section.get("page") or 1
 
-        logger.info(f"  Table {i}: complexity={complexity:.2f}, route={route}")
+        logger.info(f"  Table {i}: complexity={complexity:.2f}")
 
         results.append({
             "section_idx": section_idx,
             "complexity_score": round(complexity, 4),
-            "route": route,
             "page": page,
             "content": content,
             "bbox": section.get("bbox"),
@@ -207,14 +218,16 @@ def refine_matched_tables(tables_path, matched_section_indices):
 
     tables = json.loads(tables_path.read_text(encoding="utf-8"))
 
-    to_refine = []
-    for table in tables:
-        if table.get("section_idx") not in matched_section_indices:
-            continue
-        if table.get("route") != "complex":
-            logger.info(f"  Skipping simple table (section {table['section_idx']})")
-            continue
-        to_refine.append(table)
+
+
+    matched = [t for t in tables if t.get("section_idx") in matched_section_indices]
+    to_refine = [t for t in matched
+                 if t.get("complexity_score", 0) >= config.VISION_COMPLEXITY_THRESHOLD]
+
+    skipped = len(matched) - len(to_refine)
+    if skipped:
+        logger.info(f"  Refining {len(to_refine)} matched tables above complexity "
+                    f"{config.VISION_COMPLEXITY_THRESHOLD}; {skipped} simpler ones left as markdown")
 
     if not to_refine:
         for table in tables:
@@ -234,6 +247,7 @@ def refine_matched_tables(tables_path, matched_section_indices):
             idx, html, used_vision = fut.result()
             if html is None:
                 continue
+            by_idx[idx]["original_content"] = by_idx[idx].get("content", "")
             by_idx[idx]["content"] = html
             by_idx[idx]["refined"] = True
             by_idx[idx]["refined_format"] = "html"

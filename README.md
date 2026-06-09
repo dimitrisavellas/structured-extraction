@@ -216,13 +216,13 @@ model — check `ollama list` first.
 
 ```bash
 # one PDF
-structured-extract --pdf pdf/1167fc.pdf --keys gain CMRR "supply voltage"
+structured-extract pdf/1167fc.pdf --keys gain CMRR "supply voltage"
 
 # a whole directory of PDFs
-structured-extract --pdf-dir pdf/ --keys revenue "net income"
+structured-extract pdf/ --keys revenue "net income"
 
 # equivalent, without the console script:
-python -m structured_data_extraction.main --pdf pdf/1167fc.pdf --keys gain CMRR
+python -m structured_data_extraction.main pdf/1167fc.pdf --keys gain CMRR
 ```
 
 - Wrap multi-word keys in quotes.

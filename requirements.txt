@@ -17,4 +17,4 @@ joblib
 pymupdf
 html5lib
 einops
-Levenshtein
+rapidfuzz

@@ -108,14 +108,10 @@ def process_batch(pdf_dir, user_keys):
 
 def main():
     parser = argparse.ArgumentParser(description="Document extraction pipeline")
-    parser.add_argument("--pdf", help="Path to a single PDF")
-    parser.add_argument("--pdf-dir", help="Path to directory of PDFs")
+    parser.add_argument("path", help="Path to a PDF file or a directory of PDFs")
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
     args = parser.parse_args()
-
-    if not args.pdf and not args.pdf_dir:
-        parser.error("Either --pdf or --pdf-dir is required")
 
     user_keys = args.keys
     if not user_keys:
@@ -128,16 +124,16 @@ def main():
 
     config.OUTPUT_DIR = args.output
 
-    if args.pdf:
-        result = process_single_pdf(args.pdf, user_keys)
+    if Path(args.path).is_dir():
+        results = process_batch(args.path, user_keys)
+        print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
+    else:
+        result = process_single_pdf(args.path, user_keys)
         if result:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
             print("Extraction failed.")
             sys.exit(1)
-    else:
-        results = process_batch(args.pdf_dir, user_keys)
-        print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -13,9 +13,6 @@ from . import config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-
-# pypdfium2 backend + FAST tableformer is ~2x faster than defaults on datasheets.
-# OCR is off
 pipeline_opts = PdfPipelineOptions()
 pipeline_opts.do_ocr = False
 pipeline_opts.do_table_structure = True
@@ -29,7 +26,6 @@ converter = DocumentConverter(
         )
     }
 )
-
 
 
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")

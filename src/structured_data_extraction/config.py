@@ -47,7 +47,9 @@ VOCAB_TOP_N = 50
 VOCAB_MAX_NGRAM = 4
 SIMILARITY_THRESHOLD = 0.55
 SEARCH_TOP_K = 25
-TABLE_COMPLEXITY_THRESHOLD = 0.20
+
+
+VISION_COMPLEXITY_THRESHOLD = 0.15
 VISION_PARALLELISM = int(os.environ.get("VISION_PARALLELISM", "4"))
 
 # expand short keys with domain vocabulary before embedding
