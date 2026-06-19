@@ -14,14 +14,15 @@ MODELS_DIR = ROOT / "models"
 OLLAMA_SCHEMA_MODEL = os.environ.get("OLLAMA_SCHEMA_MODEL", "glm-5.1:cloud")
 OLLAMA_EXTRACT_MODEL = os.environ.get("OLLAMA_EXTRACT_MODEL", "gemma4:31b-cloud")
 
-# models used for parallel multi-model extraction
+# models used for parallel extraction
 EXTRACTION_MODELS = [
     "gemma4:31b-cloud",
     "deepseek-v4-flash:cloud",
-    "gpt-oss:120b-cloud",
+    "glm-4.7:cloud",
 ]
 EXTRACTION_WORKERS = 3
-OLLAMA_VISION_MODEL = os.environ.get("OLLAMA_VISION_MODEL", "qwen3-vl:235b-instruct-cloud")
+OLLAMA_VISION_MODEL = os.environ.get("OLLAMA_VISION_MODEL", "kimi-k2.7-code:cloud") # qwen3-vl:235b-instruct-cloud is retired now unfortunately
+                                                                                    # will check if qwen3.5:397b-cloud is better than kimi-k2.7-code:cloud when it's out of private beta
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "ollama")
 MAX_LLM_RETRIES = 3

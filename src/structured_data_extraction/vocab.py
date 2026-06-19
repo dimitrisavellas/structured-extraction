@@ -11,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 def extract_vocab(md_path):
     md_path = Path(md_path)
-    if not md_path.exists():
-        raise FileNotFoundError(f"Markdown not found: {md_path}")
 
     out_path = Path(config.INTERMEDIATE_DIR) / f"{md_path.stem}_vocab.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)

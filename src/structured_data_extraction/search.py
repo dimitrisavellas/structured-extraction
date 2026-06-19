@@ -17,6 +17,80 @@ def cosine_similarity(a, b):
     return a_norm @ b_norm.T
 
 
+def _load_inputs(section_embeddings_path, key_embeddings_path,
+                 section_texts_path, key_texts_path,
+                 sections_path, row_map_path):
+    sec_embs = np.load(section_embeddings_path)
+    key_embs = np.load(key_embeddings_path)
+    sec_texts = json.loads(Path(section_texts_path).read_text(encoding="utf-8"))
+    key_texts = json.loads(Path(key_texts_path).read_text(encoding="utf-8"))
+
+    sections = []
+    if sections_path and Path(sections_path).exists():
+        sections = json.loads(Path(sections_path).read_text(encoding="utf-8"))
+
+    row_map_data = {"num_sections": 0, "rows": []}
+    if row_map_path and Path(row_map_path).exists():
+        row_map_data = json.loads(Path(row_map_path).read_text(encoding="utf-8"))
+
+    return sec_embs, key_embs, sec_texts, key_texts, sections, row_map_data
+
+
+def _resolve_original_keys(original_keys, stem):
+    if original_keys is not None:
+        return original_keys
+    # embed.py writes the unexpanded keys here
+    orig_keys_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_original_keys.json"
+    if orig_keys_path.exists():
+        return json.loads(orig_keys_path.read_text(encoding="utf-8"))
+    raise ValueError(
+        f"original_keys not provided and {orig_keys_path} does not exist. "
+        "Pass original_keys directly or ensure _original_keys.json is present."
+    )
+
+
+def _build_match_dict(idx, score, sec_texts, sections, num_secs, rows):
+    preview = sec_texts[idx][:150] + "..." if len(sec_texts[idx]) > 150 else sec_texts[idx]
+
+    is_row = idx >= num_secs and len(rows) > 0
+    if is_row:
+        row_idx = idx - num_secs
+        row_info = rows[row_idx] if row_idx < len(rows) else {}
+        sec_idx = row_info.get("section_idx", idx)
+    else:
+        sec_idx = idx
+
+    match = {
+        "section_idx": int(sec_idx),
+        "similarity": round(score, 4),
+        "content_preview": preview,
+    }
+    if is_row:
+        match.update({
+            "is_row": True,
+            "row_text": row_info.get("row_text", ""),
+            "row_number": row_info.get("row_number"),
+            "group_header": row_info.get("group_header", ""),
+        })
+    if sec_idx < len(sections):
+        match["type"] = sections[sec_idx].get("type", "unknown")
+
+    return match
+
+
+def _select_hits_for_key(sims, sec_texts, sections, num_secs, rows, threshold):
+    ranked = np.argsort(sims)[::-1]
+    key_matches = []
+    for idx in ranked:
+        score = float(sims[idx])
+        if score < threshold:
+            break
+        if len(key_matches) >= config.SEARCH_TOP_K:
+            break
+        key_matches.append(_build_match_dict(idx, score, sec_texts, sections, num_secs, rows))
+    return key_matches
+
+
 def search(section_embeddings_path, key_embeddings_path, section_texts_path,
            key_texts_path, sections_path=None, original_keys=None,
            row_map_path=None, threshold=None):
@@ -31,79 +105,29 @@ def search(section_embeddings_path, key_embeddings_path, section_texts_path,
         logger.info(f"Skipping search — already exists")
         return json.loads(out_path.read_text(encoding="utf-8"))
 
-    sec_embs = np.load(section_embeddings_path)
-    key_embs = np.load(key_embeddings_path)
-    sec_texts = json.loads(Path(section_texts_path).read_text(encoding="utf-8"))
-    key_texts = json.loads(Path(key_texts_path).read_text(encoding="utf-8"))
+    sec_embs, key_embs, sec_texts, key_texts, sections, row_map_data = _load_inputs(
+        section_embeddings_path, key_embeddings_path,
+        section_texts_path, key_texts_path,
+        sections_path, row_map_path,
+    )
 
     if key_embs.size == 0:
         logger.warning("No key embeddings. Nothing to search.")
         return {}
 
-    sections = []
-    if sections_path and Path(sections_path).exists():
-        sections = json.loads(Path(sections_path).read_text(encoding="utf-8"))
-
-    row_map_data = {"num_sections": 0, "rows": []}
-    if row_map_path and Path(row_map_path).exists():
-        row_map_data = json.loads(Path(row_map_path).read_text(encoding="utf-8"))
+    # num_secs is the boundary: idx >= num_secs means a row hit
     num_secs = row_map_data.get("num_sections", len(sections))
     rows = row_map_data.get("rows", [])
 
     sim_matrix = cosine_similarity(key_embs, sec_embs)
-
-    if original_keys is None:
-        # embed.py writes the unexpanded keys here; fall back to that before guessing
-        orig_keys_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_original_keys.json"
-        if orig_keys_path.exists():
-            orig_keys = json.loads(orig_keys_path.read_text(encoding="utf-8"))
-        else:
-            orig_keys = [text.split()[0] for text in key_texts]
-    else:
-        orig_keys = original_keys
+    orig_keys = _resolve_original_keys(original_keys, stem)
 
     matches = {}
     for i, key_text in enumerate(key_texts):
         orig_key = orig_keys[i] if i < len(orig_keys) else key_text
-        sims = sim_matrix[i]
-        ranked = np.argsort(sims)[::-1]
-
-        key_matches = []
-        for idx in ranked:
-            score = float(sims[idx])
-            if score < threshold:
-                break
-            if len(key_matches) >= config.SEARCH_TOP_K:
-                break
-
-            preview = sec_texts[idx][:150] + "..." if len(sec_texts[idx]) > 150 else sec_texts[idx]
-
-            # row-level matches come after section embeddings in the array
-            is_row = idx >= num_secs and len(rows) > 0
-            if is_row:
-                row_idx = idx - num_secs
-                row_info = rows[row_idx] if row_idx < len(rows) else {}
-                sec_idx = row_info.get("section_idx", idx)
-            else:
-                sec_idx = idx
-
-            match = {
-                "section_idx": int(sec_idx),
-                "similarity": round(score, 4),
-                "content_preview": preview,
-            }
-            if is_row:
-                match.update({
-                    "is_row": True,
-                    "row_text": row_info.get("row_text", ""),
-                    "row_number": row_info.get("row_number"),
-                    "group_header": row_info.get("group_header", ""),
-                })
-
-            if sec_idx < len(sections):
-                match["type"] = sections[sec_idx].get("type", "unknown")
-            key_matches.append(match)
-
+        key_matches = _select_hits_for_key(
+            sim_matrix[i], sec_texts, sections, num_secs, rows, threshold
+        )
         matches[orig_key] = key_matches
         logger.info(f"Key '{orig_key}': {len(key_matches)} matches above {threshold}")
 

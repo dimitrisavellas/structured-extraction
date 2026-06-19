@@ -1,0 +1,1810 @@
+{
+  "0150200051": {
+    "product family": [
+      {
+        "value": "Cable"
+      }
+    ],
+    "cable length": [
+      {
+        "value": 0.03,
+        "value_unit": "m"
+      }
+    ],
+    "product specification": [
+      {
+        "value": "PS-15020-001"
+      }
+    ],
+    "Voltage": [
+      {
+        "qualifier": "Maximum",
+        "value": 60.0,
+        "value_unit": "V AC"
+      }
+    ],
+    "net weight": [
+      {
+        "value": 0.069,
+        "value_unit": "g"
+      }
+    ]
+  },
+  "2D iPSC p7 d0 222d119683938118b7f7d1f17fc21466": {
+    "DMEM": [
+      {
+        "volume": 40.0,
+        "volume_unit": "mL",
+        "condition": "cold, with 1:1000 Ri"
+      }
+    ],
+    "mTeSR": [
+      {
+        "volume": 5.0,
+        "volume_unit": "mL",
+        "condition": "mTeSR+ with Ri"
+      }
+    ],
+    "StemMACS": [
+      {
+        "volume": 5.0,
+        "volume_unit": "mL",
+        "condition": "with Ri"
+      }
+    ]
+  },
+  "2D iPSC p7 d3 p8 d0 222d11968393813abd5de2b3a86d09c2": {
+    "protocol": [
+      {
+        "value": "usual ReLeSR protocol"
+      }
+    ],
+    "seeded": [
+      {
+        "source": "both mTeSR+ wells",
+        "destination": "1x T75"
+      },
+      {
+        "source": "both StemMACS wells",
+        "destination": "2x T75"
+      }
+    ]
+  },
+  "AD8-0000-E01": {
+    "logic voltage": [
+      {
+        "condition": "Logic low voltage",
+        "qualifier": "Max",
+        "value": 0.5,
+        "value_unit": "V"
+      },
+      {
+        "condition": "Logic high voltage",
+        "qualifier": "Min",
+        "value": -0.5,
+        "value_unit": "V"
+      }
+    ],
+    "supply current": [
+      {
+        "condition": "without LED",
+        "value": 15,
+        "value_unit": "mA"
+      },
+      {
+        "condition": "with LED",
+        "value": 24,
+        "value_unit": "mA"
+      }
+    ],
+    "humidity limits": [
+      {
+        "value": "0 - 95",
+        "value_unit": "%RH",
+        "condition": "non-condensing"
+      }
+    ]
+  },
+  "AD840": {
+    "gain bandwidth": [
+      {
+        "differentiator": "",
+        "qualifier": "",
+        "condition": "Gain ≥ 10",
+        "value": 400,
+        "value_unit": "MHz"
+      },
+      {
+        "differentiator": "AD840J",
+        "qualifier": "Typ",
+        "condition": "VOUT = 90 mV p-p, AV = –10",
+        "value": 400,
+        "value_unit": "MHz"
+      },
+      {
+        "differentiator": "AD840K",
+        "qualifier": "Typ",
+        "condition": "VOUT = 90 mV p-p, AV = –10",
+        "value": 400,
+        "value_unit": "MHz"
+      },
+      {
+        "differentiator": "AD840S",
+        "qualifier": "Typ",
+        "condition": "VOUT = 90 mV p-p, AV = –10",
+        "value": 400,
+        "value_unit": "MHz"
+      }
+    ],
+    "quiescent current": [
+      {
+        "differentiator": "",
+        "qualifier": "Max",
+        "condition": "",
+        "value": 12,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840J",
+        "qualifier": "Max",
+        "condition": "TMIN-TMAX",
+        "value": 16,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840J",
+        "qualifier": "Typ",
+        "condition": "",
+        "value": 12,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840J",
+        "qualifier": "Max",
+        "condition": "",
+        "value": 14,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840K",
+        "qualifier": "Max",
+        "condition": "TMIN-TMAX",
+        "value": 16,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840K",
+        "qualifier": "Max",
+        "condition": "",
+        "value": 14,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840K",
+        "qualifier": "Typ",
+        "condition": "",
+        "value": 12,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840S",
+        "qualifier": "Max",
+        "condition": "TMIN-TMAX",
+        "value": 18,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840S",
+        "qualifier": "Typ",
+        "condition": "",
+        "value": 12,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "AD840S",
+        "qualifier": "Max",
+        "condition": "",
+        "value": 14,
+        "value_unit": "mA"
+      }
+    ],
+    "input voltage noise": [
+      {
+        "differentiator": "",
+        "qualifier": "",
+        "condition": "",
+        "value": 4,
+        "value_unit": "nV/√Hz"
+      },
+      {
+        "differentiator": "AD840J",
+        "qualifier": "Typ",
+        "condition": "f = 1 kHz",
+        "value": 4,
+        "value_unit": "nV/√Hz"
+      },
+      {
+        "differentiator": "AD840K",
+        "qualifier": "Typ",
+        "condition": "f = 1 kHz",
+        "value": 4,
+        "value_unit": "nV/√Hz"
+      },
+      {
+        "differentiator": "AD840S",
+        "qualifier": "Typ",
+        "condition": "f = 1 kHz",
+        "value": 4,
+        "value_unit": "nV/√Hz"
+      }
+    ]
+  },
+  "ada4523-1": {
+    "internal chopping frequency": [
+      {
+        "qualifier": "Typ",
+        "value": 330,
+        "value_unit": "kHz"
+      }
+    ],
+    "EMF": [
+      {
+        "value": 200,
+        "value_unit": "nV/°C",
+        "condition": "junctions of copper wire from different manufacturers"
+      }
+    ],
+    "Output Voltage Swing Low": [
+      {
+        "qualifier": "Typ",
+        "condition": "VOL = VOUT − V − No load",
+        "value": 12,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "VOL = VOUT − V − No load",
+        "value": 20,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "No load, −40°C ≤ TA ≤ +125°C",
+        "value": 30,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "Sink current (ISINK) = 1 mA",
+        "value": 52,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "Sink current (ISINK) = 1 mA",
+        "value": 75,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "Sink current (ISINK) = 1 mA, −40°C ≤ TA ≤ +125°C ISINK = 5 mA",
+        "value": 100,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "ISINK = 5 mA",
+        "value": 215,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "ISINK = 5 mA",
+        "value": 300,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "ISINK = 5 mA, −40°C ≤ TA ≤ +125°C",
+        "value": 400,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "ISINK = 1 mA",
+        "value": 50,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "ISINK = 1 mA",
+        "value": 75,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "ISINK = 1 mA, −40°C ≤ TA ≤ +125°C",
+        "value": 100,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "ISINK = 5 mA",
+        "value": 215,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "ISINK = 5 mA",
+        "value": 300,
+        "value_unit": "mV"
+      }
+    ]
+  },
+  "ALD1722_E": {
+    "rise time": [
+      {
+        "differentiator": "1722E",
+        "qualifier": "Typ",
+        "value": 0.2,
+        "value_unit": "µs",
+        "condition": "R_L = 10KΩ"
+      },
+      {
+        "differentiator": "1722",
+        "qualifier": "Typ",
+        "value": 0.2,
+        "value_unit": "µs",
+        "condition": "R_L = 10KΩ"
+      }
+    ],
+    "overshoot factor": [
+      {
+        "differentiator": "1722E",
+        "qualifier": "Typ",
+        "value": 10,
+        "value_unit": "%",
+        "condition": "R_L = 10KΩ, C_L = 100pF"
+      },
+      {
+        "differentiator": "1722",
+        "qualifier": "Typ",
+        "value": 10,
+        "value_unit": "%",
+        "condition": "R_L = 10KΩ, C_L = 100pF"
+      }
+    ],
+    "Average Long term input offset": [
+      {
+        "differentiator": "1722E",
+        "qualifier": "Typ",
+        "value": 0.02,
+        "value_unit": "µV/1000 hrs",
+        "condition": ""
+      },
+      {
+        "differentiator": "1722",
+        "qualifier": "Typ",
+        "value": 0.02,
+        "value_unit": "µV/1000 hrs",
+        "condition": ""
+      }
+    ]
+  },
+  "ALD2711": {
+    "rise time": [
+      {
+        "differentiator": "2711A",
+        "qualifier": "Typ",
+        "condition": "RL = 100KΩ",
+        "value": 0.2,
+        "value_unit": "µs"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Typ",
+        "condition": "RL = 100KΩ",
+        "value": 0.2,
+        "value_unit": "µs"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Typ",
+        "condition": "RL = 100KΩ",
+        "value": 0.2,
+        "value_unit": "µs"
+      }
+    ],
+    "PSRR": [
+      {
+        "differentiator": "2711A",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 63,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711A",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 90,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 63,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 90,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 60,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ, 0°C ≤ TA ≤ +70°C",
+        "value": 90,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711ADA",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ",
+        "value": 60,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711ADA",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 85,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711BDA",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ",
+        "value": 60,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711BDA",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 85,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711DA",
+        "qualifier": "Min",
+        "condition": "RS ≤ 100KΩ",
+        "value": 60,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711DA",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 85,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711A",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 100,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 100,
+        "value_unit": "dB"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Typ",
+        "condition": "RS ≤ 100KΩ",
+        "value": 100,
+        "value_unit": "dB"
+      }
+    ],
+    "slew rate": [
+      {
+        "differentiator": "2711A",
+        "qualifier": "Typ",
+        "condition": "AV = +1, CL = 50pF",
+        "value": 1.0,
+        "value_unit": "V/μs"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Typ",
+        "condition": "AV = +1, CL = 50pF",
+        "value": 1.0,
+        "value_unit": "V/μs"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Typ",
+        "condition": "AV = +1, CL = 50pF",
+        "value": 1.0,
+        "value_unit": "V/μs"
+      },
+      {
+        "differentiator": "2711A",
+        "qualifier": "Typ",
+        "condition": "AV = +1, RL = 100KΩ",
+        "value": 0.7,
+        "value_unit": "V/µs"
+      },
+      {
+        "differentiator": "2711B",
+        "qualifier": "Typ",
+        "condition": "AV = +1, RL = 100KΩ",
+        "value": 0.7,
+        "value_unit": "V/µs"
+      },
+      {
+        "differentiator": "2711",
+        "qualifier": "Typ",
+        "condition": "AV = +1, RL = 100KΩ",
+        "value": 0.7,
+        "value_unit": "V/µs"
+      },
+      {
+        "differentiator": "",
+        "qualifier": "",
+        "condition": "",
+        "value": 0.7,
+        "value_unit": "V/µs"
+      }
+    ]
+  },
+  "BC546": {
+    "collector cutoff current": [
+      {
+        "differentiator": "BC546",
+        "condition": "VCE = 70 V, VBE = 0",
+        "qualifier": "Typ",
+        "value": 0.2,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC546",
+        "condition": "VCE = 70 V, VBE = 0",
+        "qualifier": "Max",
+        "value": 15,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC547",
+        "condition": "VCE = 50 V, VBE = 0",
+        "qualifier": "Typ",
+        "value": 0.2,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC547",
+        "condition": "VCE = 50 V, VBE = 0",
+        "qualifier": "Max",
+        "value": 15,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC548",
+        "condition": "VCE = 35 V, VBE = 0",
+        "qualifier": "Typ",
+        "value": 0.2,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC548",
+        "condition": "VCE = 35 V, VBE = 0",
+        "qualifier": "Max",
+        "value": 15,
+        "value_unit": "nA"
+      },
+      {
+        "differentiator": "BC546/547/548",
+        "condition": "VCE = 30 V, TA = 125 ° C",
+        "qualifier": "Max",
+        "value": 4.0,
+        "value_unit": "µA"
+      }
+    ],
+    "DC current gain": [
+      {
+        "differentiator": "BC547A/548A",
+        "condition": "IC = 10 µA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 90
+      },
+      {
+        "differentiator": "BC546B/547B/548B",
+        "condition": "IC = 10 µA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 150
+      },
+      {
+        "differentiator": "BC548C",
+        "condition": "IC = 10 µA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 270
+      },
+      {
+        "differentiator": "BC546",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 110
+      },
+      {
+        "differentiator": "BC546",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 450
+      },
+      {
+        "differentiator": "BC547",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 110
+      },
+      {
+        "differentiator": "BC547",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 800
+      },
+      {
+        "differentiator": "BC548",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 110
+      },
+      {
+        "differentiator": "BC548",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 800
+      },
+      {
+        "differentiator": "BC547A/548A",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 110
+      },
+      {
+        "differentiator": "BC547A/548A",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 180
+      },
+      {
+        "differentiator": "BC547A/548A",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 220
+      },
+      {
+        "differentiator": "BC546B/547B/548B",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 200
+      },
+      {
+        "differentiator": "BC546B/547B/548B",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 290
+      },
+      {
+        "differentiator": "BC546B/547B/548B",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 450
+      },
+      {
+        "differentiator": "BC547C/BC548C",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Min",
+        "value": 420
+      },
+      {
+        "differentiator": "BC547C/BC548C",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 520
+      },
+      {
+        "differentiator": "BC547C/BC548C",
+        "condition": "IC = 2.0 mA, VCE = 5.0 V",
+        "qualifier": "Max",
+        "value": 800
+      },
+      {
+        "differentiator": "BC547A/548A",
+        "condition": "IC = 100 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 120
+      },
+      {
+        "differentiator": "BC546B/547B/548B",
+        "condition": "IC = 100 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 180
+      },
+      {
+        "differentiator": "BC548C",
+        "condition": "IC = 100 mA, VCE = 5.0 V",
+        "qualifier": "Typ",
+        "value": 300
+      }
+    ],
+    "Thermal Resistance": [
+      {
+        "condition": "Junction to Ambient",
+        "qualifier": "Max",
+        "value": 200,
+        "value_unit": "° C/W"
+      },
+      {
+        "condition": "Junction to Case",
+        "qualifier": "Max",
+        "value": 83.3,
+        "value_unit": "° C/W"
+      }
+    ]
+  },
+  "Diff d-0 222d11968393818e8b47f1429be49193": {
+    "CHIR": [
+      {
+        "concentration": 4,
+        "concentration_unit": "µM",
+        "volume": 8,
+        "volume_unit": "µL"
+      },
+      {
+        "concentration": 5,
+        "concentration_unit": "µM",
+        "volume": 10,
+        "volume_unit": "µL"
+      },
+      {
+        "concentration": 6,
+        "concentration_unit": "µM",
+        "volume": 12,
+        "volume_unit": "µL"
+      },
+      {
+        "concentration": 5,
+        "concentration_unit": "µM",
+        "volume": 20,
+        "volume_unit": "µL"
+      }
+    ],
+    "serological pipette": [
+      {
+        "volume": 10,
+        "volume_unit": "mL"
+      }
+    ]
+  },
+  "Diff d12 222d11968393810ea8b5d3a5bbfb24e1": {
+    "lactate stock": [
+      {
+        "volume": 4.0,
+        "volume_unit": "mL",
+        "medium_volume": 36.0,
+        "medium_volume_unit": "mL"
+      }
+    ],
+    "serological pipette": [
+      {
+        "volume": 10.0,
+        "volume_unit": "mL"
+      }
+    ]
+  },
+  "Diff d1 222d1196839381baa62bea713941d2f4": {
+    "albumin": [
+      {
+        "condition": "fresh",
+        "ratio": "1:100"
+      }
+    ],
+    "falcon": [
+      {
+        "volume": 15.0,
+        "volume_unit": "mL"
+      }
+    ]
+  },
+  "Diff d-1 222d1196839381faaefdca27cb30255b": {
+    "aliquot volume": [
+      {
+        "value": 30,
+        "value_unit": "mL"
+      }
+    ]
+  },
+  "Diff d14 222d119683938174ad21db3320bcaaa7": {
+    "lactate selection medium": [
+      {
+        "volume": 40.0,
+        "volume_unit": "mL",
+        "supplement": "with fresh lactate stock (36 mL medium with 4 mL stock) and warm water"
+      }
+    ],
+    "comment": [
+      {
+        "value": "Some EBs have more \"fluffy \" appearence, no distinct borders. Could be due to shaker failure"
+      },
+      {
+        "value": "A lot of cell debris visible in both diffs, makes sense during lactate selection"
+      },
+      {
+        "value": "Shaker failed yesterday, so morphology looks odd again, especially in diff02_02 from the 6 well with EBs sticking together"
+      }
+    ]
+  },
+  "Diff d20 222d1196839381438012c3c03bc4af26": {
+    "cardiac culture medium": [
+      {
+        "volume": 20.0,
+        "volume_unit": "mL"
+      }
+    ],
+    "serological pipette": [
+      {
+        "volume": 10.0,
+        "volume_unit": "mL"
+      }
+    ]
+  },
+  "Diff d21 222d11968393810fa4a3ec2fecb80b09": {
+    "PSC": [
+      {
+        "dilution": "1:1000"
+      }
+    ],
+    "DNase": [
+      {
+        "dilution": "1:10",
+        "volume": "50 µL in 450 µL PBS +/+"
+      },
+      {
+        
+        "volume": 25 ,
+        "volume_unit": "µL"
+      }
+    ],
+    "Centrifuge": [
+      {
+        "speed": 300,
+        "speed_unit": "xg",
+        "duration": 3,
+        "duration_unit": "minutes"
+      }
+    ],
+    "Cardiac Culture": [
+      {
+        "volume": 10.0,
+        "volume_unit": "mL"
+      },
+      {
+        "action": "collect all cells using Cardiac Culture Medium"
+      }
+    ],
+    "RPM": [
+      {
+        "speed": 1000.0,
+        "speed_unit": "RPM",
+        "duration": 7,
+        "duration_unit": "minutes"
+      }
+    ],
+    "counts": [
+      {
+        "differentiator": "diff02_02",
+        "count_values": "840k and 909k",
+        "viability": "85%",
+        "average": "864.5k",
+        "volume": "4 mL",
+        "total": "3.458 mio"
+      },
+      {
+        "differentiator": "diff02_03",
+        "count_values": "1.93 and 2.43 mio",
+        "viability": "88%",
+        "average": "2.18 mio",
+        "volume": "8 mL",
+        "total": "17.44 mio"
+      }
+    ],
+    "BCT": [
+      {
+        "differentiator": "Diff02_03",
+        "cells_used": "12 mio",
+        "bct_count": 12.0
+      },
+      {
+        "differentiator": "Diff02_02",
+        "cells_used": "3 mio",
+        "bct_count": 3.0
+      }
+    ],
+    "purity": [
+      {
+        "value": "98-99",
+        "value_unit": "%"
+      }
+    ]
+  },
+  "Diff d2 222d1196839381169b8dd844acd1f341": {
+    "serological pipette": [
+      {
+        "volume": 10.0,
+        "volume_unit": "mL"
+      }
+    ]
+  },
+  "Diff d-2 222d11968393816ab739f96052bc35fa": {
+    "ROCK inhibitor": [
+      {
+        "value": "1:1000"
+      },
+      {
+        "value": "Ri"
+      }
+    ],
+    "Incubated": [
+      {
+        "duration": 10,
+        "duration_unit": "minutes"
+      }
+    ],
+    "detach": [
+      {
+        "value": "20% of cells didnt detach"
+      },
+      {
+        "value": "all the cells have detached"
+      }
+    ],
+    "RT PBS": [
+      {
+        "value": 15.0,
+        "value_unit": "mL"
+      }
+    ],
+    "mio per plate": [
+      {
+        "value": 6.0,
+        "value_unit": "mio"
+      }
+    ],
+    "aggregate cells": [
+      {
+        "value": "24",
+        "value_unit": "hours"
+      }
+    ]
+  },
+  "Diff d5 222d11968393812c9f44f4153ae70998": {
+    "albumin": [
+      {
+        "volume": 300.0,
+        "volume_unit": "µL"
+      }
+    ],
+    "date": [
+      {
+        "value": "March 10, 2025"
+      }
+    ]
+  },
+  "Diff d7 222d119683938193b326d3e17d4031f4": {
+    "CM": [
+      {
+        "volume": 40.0,
+        "volume_unit": "mL"
+      }
+    ],
+    "day 7": [
+      {
+        "action": "Add insulin"
+      }
+    ]
+  },
+  "Diff d9 222d119683938107bbb6ea581e9f1820": {
+    "freezer": [
+      {
+        "value": -20,
+        "value_unit": "°C"
+      }
+    ]
+  },
+  "eMT d1 2D CMs d0 222d11968393816eb11cc3fc5d43b60f": {
+    "BCT": [
+      {
+        "volume": 2,
+        "volume_unit": "mL",
+        "supplement": "Ri"
+      },
+      {
+        "volume": 4,
+        "volume_unit": "mL",
+        "supplement": "AA"
+      }
+    ],
+    "DMEM": [
+      {
+        "volume": 9,
+        "volume_unit": "mL",
+        "method": "dropwise"
+      }
+    ],
+    "fibronectin": [
+      {
+        "dilution": "1:100",
+        "action": "removed"
+      },
+      {
+        "dilution": "1:100",
+        "action": "coated"
+      }
+    ]
+  },
+  "eMT d27 222d11968393810dba38caf880faf6df": {
+    "16.1": [
+      {
+        "value": "2-3 . 5",
+        "value_unit": "mN"
+      }
+    ],
+    "16.2": [
+      {
+        "value": 7,
+        "value_unit": "mN"
+      }
+    ]
+  },
+  "eMT d3 2D CMs d2 222d1196839381cf9bbbe4db5c387a95": {
+    "eMT16.1": [
+      {
+        "contracting_status": "all contracting",
+        "bct_count": 3.0
+      }
+    ],
+    "eMT16.2": [
+      {
+        "contracting_status": "not contracting",
+        "bct_count": null
+      }
+    ],
+    "eMT day": [
+      {
+        "value": 3.0
+      }
+    ],
+    "2D layer": [
+      {
+        "day": 1.0,
+        "seeding_density": "around 4 mio",
+        "detachment_status": "less than usual"
+      }
+    ]
+  },
+  "eMT d63 222d11968393813db7bdede059f4319a": {
+    "Date": [
+      {
+        "value": "May 28, 2025"
+      }
+    ],
+    "EMT medium": [
+      {
+        "value": 7,
+        "value_unit": "mL"
+      }
+    ]
+  },
+  "lf356": {
+    "Input offset voltage": [
+      {
+        "qualifier": "TYP",
+        "condition": "RS = 50 Ω, TA = 25°C",
+        "differentiator": "LF15x, LF25x, LF356B",
+        "value": 3,
+        "unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "RS = 50 Ω, TA = 25°C",
+        "differentiator": "LF15x, LF25x, LF356B",
+        "value": 5,
+        "unit": "mV"
+      },
+      {
+        "qualifier": "TYP",
+        "condition": "RS = 50 Ω, TA = 25°C",
+        "differentiator": "LF35x",
+        "value": 3,
+        "unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "RS = 50 Ω, TA = 25°C",
+        "differentiator": "LF35x",
+        "value": 10,
+        "unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "RS = 50 Ω, Over temperature",
+        "differentiator": "LF15x",
+        "value": 7,
+        "unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "RS = 50 Ω, Over temperature",
+        "differentiator": "LF25x, LF356B",
+        "value": 6.5,
+        "unit": "mV"
+      },
+      {
+
+        "qualifier": "MAX",
+        "condition": "RS = 50 Ω, Over temperature",
+        "differentiator": "LF35x",
+        "value": 13,
+        "unit": "mV"
+      }      
+    ],
+    "Still Air": [
+      {
+        "differentiator": "LMC (TO-99)",
+        "value": 160,
+        "unit": "°C/W"
+      }
+    ],
+    "Input Capacitance": [
+      {
+        "condition": "LFx55,LFx56, LF356B,LFx57",
+        "value": 3,
+        "unit": "pF"
+      },
+      {
+        "condition": "LFx56, LF356B",
+        "value": 3,
+        "unit": "pF"
+      },
+      {
+        "condition": "LFx57",
+        "value": 3,
+        "unit": "pF"
+      }
+    ]
+  },
+  "LM321-D": {
+    "Output Voltage": [
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Min",
+        "condition": "RL = 2 k to VEE",
+        "value": "VCC-1.8",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Min",
+        "condition": "RL = 10 k to VEE",
+        "value": "VCC-1.8",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Typ",
+        "condition": "RL = 2 k to VEE",
+        "value": "VCC-1.4",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Typ",
+        "condition": "RL = 10 k to VEE",
+        "value": "VCC-1.4",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage Low",
+        "qualifier": "Typ",
+        "condition": "RL = 10 k to VCC",
+        "value": "VEE+0.8",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage Low",
+        "qualifier": "Max",
+        "condition": "RL = 10 k to VCC",
+        "value": "VEE+1.0",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Min",
+        "condition": "RL = 2 k to VEE",
+        "value": "VCC-2.5",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Min",
+        "condition": "RL = 10 k to VEE",
+        "value": "VCC-2.5",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Typ",
+        "condition": "RL = 2 k to VEE",
+        "value": "VCC-2.0",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage High",
+        "qualifier": "Typ",
+        "condition": "RL = 10 k to VEE",
+        "value": "VCC-1.5",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage Low",
+        "qualifier": "Typ",
+        "condition": "RL = 10 k to VCC",
+        "value": "VEE+1.0",
+        "value_unit": "V"
+      },
+      {
+        "parameter": "Output Voltage Low",
+        "qualifier": "Max",
+        "condition": "RL = 10 k to VCC",
+        "value": "VEE+1.5",
+        "value_unit": "V"
+      }
+    ],
+    "Phase Margin": [
+      {
+        "qualifier": "Typ",
+        "condition": "CL = 25 pF, RL to VCC",
+        "value": 60,
+        "value_unit": "°"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "CL = 25 pF, RL to VCC",
+        "value": 66,
+        "value_unit": "°"
+      }
+    ]
+  },
+  "lmv358a": {
+    "CMRR": [
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 2.5 V, (V–) – 0.1 V < V_CM < (V+) – 1.4 V, T_A = –40°C to 125°C",
+        "value": 86,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 5.5 V, (V–) – 0.1 V < V_CM < (V+) – 1.4 V, T_A = –40°C to 125°C",
+        "value": 95,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "MIN",
+        "condition": "V_S = 5.5 V, (V–) – 0.1 V < V_CM < (V+) + 0.1 V, T_A = –40°C to 125°C",
+        "value": 63,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 5.5 V, (V–) – 0.1 V < V_CM < (V+) + 0.1 V, T_A = –40°C to 125°C",
+        "value": 77,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 2.5 V, (V–) – 0.1 V < V_CM < (V+) + 0.1 V, T_A = –40°C to 125°C",
+        "value": 68,
+        "value_unit": "dB"
+      }
+    ],
+    "Voltage Output Swing": [
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 5.5 V, R_L = 10 kΩ",
+        "value": 20,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "V_S = 5.5 V, R_L = 10 kΩ",
+        "value": 50,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "TYP",
+        "condition": "V_S = 5.5 V, R_L = 2 kΩ",
+        "value": 40,
+        "value_unit": "mV"
+      },
+      {
+        "qualifier": "MAX",
+        "condition": "V_S = 5.5 V, R_L = 2 kΩ",
+        "value": 75,
+        "value_unit": "mV"
+      }
+    ]
+  },
+  "rhf310a": {
+    "Heavy Ions": [
+      {
+        "category": "SET characterized",
+        "configuration": "Inverting",
+        "value": "No SET",
+        "unit": null
+      },
+      {
+        "category": "SET characterized",
+        "configuration": "Non-inverting",
+        "value": "LETth = 18",
+        "unit": "MeV.cm²/mg"
+      },
+      {
+        "category": "SET characterized",
+        "configuration": "Non-inverting",
+        "value": "σ = 1.00E-06",
+        "unit": "cm²/device"
+      },
+      {
+        "category": "SET characterized",
+        "configuration": "Subtracting",
+        "value": "σ = 2.00E-05",
+        "unit": "cm²/device"
+      },
+      {
+        "category": "SET characterized",
+        "configuration": "Subtracting",
+        "value": "LETth = 7",
+        "unit": "MeV.cm²/mg"
+      },
+      {
+        "category": "SEL immunity",
+        "condition": "at 125 °C",
+        "value": 110.0,
+        "unit": "MeV.cm²/mg"
+      }
+    ],
+    "TID": [
+      {
+        "feature": "Low-dose rate",
+        "value": 300.0,
+        "unit": "krad"
+      },
+      {
+        "feature": "ELDRS",
+        "value": 300.0,
+        "unit": "krad"
+      },
+        {
+        "feature": "High  -dose rate",
+        "value": 300.0,
+        "unit": "krad"
+      }
+    ],
+    "Maximum Power Dissipation": [
+      {
+        "condition": "at Tamb = 25 °C for Tj = 150 °C",
+        "value": 830.0,
+        "unit": "mW"
+      }
+    ]
+  },
+  "TL431": {
+    "Min Cathode Current": [
+      {
+        "differentiator": "TL431I",
+        "qualifier": "Typ.",
+        "value": 0.5,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431I",
+        "qualifier": "Max.",
+        "value": 1.0,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431AI",
+        "qualifier": "Typ.",
+        "value": 0.5,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431AI",
+        "qualifier": "Max.",
+        "value": 0.7,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431C",
+        "qualifier": "Typ.",
+        "value": 0.5,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431C",
+        "qualifier": "Max.",
+        "value": 1.0,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431AC",
+        "qualifier": "Typ.",
+        "value": 0.5,
+        "value_unit": "mA"
+      },
+      {
+        "differentiator": "TL431AC",
+        "qualifier": "Max.",
+        "value": 0.6,
+        "value_unit": "mA"
+      }
+    ],
+    "a1": [
+      {
+        "qualifier": "Min.",
+        "value": 0.1,
+        "unit": "mm"
+      },
+      {
+        "qualifier": "Max.",
+        "value": 0.25,
+        "unit": "mm"
+      },
+      {
+        "qualifier": "Min.",
+        "value": 0.004,
+        "unit": "in"
+      },
+      {
+        "qualifier": "Max.",
+        "value": 0.01,
+        "unit": "in"
+      }
+    ],
+    "F": [
+      {
+        "qualifier": "Min.",
+        "value": 3.8,
+        "unit": "mm"
+      },
+      {
+        "qualifier": "Max.",
+        "value": 4.0,
+        "unit": "mm"
+      },
+      {
+        "qualifier": "Min.",
+        "value": 0.15,
+        "unit": "in"
+      },
+      {
+        "qualifier": "Max.",
+        "value": 0.157,
+        "unit": "in"
+      }
+    ]
+  },
+  "TLV27x": {
+    "Input Bias Current": [
+      {
+        "qualifier": "Typ",
+        "condition": "V_DD = 5V, V_IC = V_DD/2, V_O = V_DD/2, RS = 50Ω, +25°C",
+        "value": 1,
+        "value_unit": "pA"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "V_DD = 5V, V_IC = V_DD/2, V_O = V_DD/2, RS = 50Ω, +25°C",
+        "value": 60,
+        "value_unit": "pA"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "V_DD = 5V, V_IC = V_DD/2, V_O = V_DD/2, RS = 50Ω, +70°C",
+        "value": 100,
+        "value_unit": "pA"
+      },
+      {
+        "qualifier": "Max",
+        "condition": "V_DD = 5V, V_IC = V_DD/2, V_O = V_DD/2, RS = 50Ω, +125°C",
+        "value": 1000,
+        "value_unit": "pA"
+      }
+    ],
+    "VOH": [
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 2.7V, +25°C",
+        "value": 2.55,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 2.7V, +25°C",
+        "value": 2.58,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 2.7V, -40°C to +125°C",
+        "value": 2.48,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 5V, +25°C",
+        "value": 4.9,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 5V, +25°C",
+        "value": 4.93,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = 5V, -40°C to +125°C",
+        "value": 4.85,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = ±5V, +25°C",
+        "value": 4.92,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = ±5V, +25°C",
+        "value": 4.96,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -1mA, V_DD = ±5V, -40°C to +125°C",
+        "value": 4.9,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 2.7V, +25°C",
+        "value": 1.9,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 2.7V, +25°C",
+        "value": 2.1,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 2.7V, -40°C to +125°C",
+        "value": 1.5,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 5V, +25°C",
+        "value": 4.6,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 5V, +25°C",
+        "value": 4.68,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = 5V, -40°C to +125°C",
+        "value": 4.5,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = ±5V, +25°C",
+        "value": 4.7,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = ±5V, +25°C",
+        "value": 4.84,
+        "value_unit": "V"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_IC = V_DD/2, I_OH = -5mA, V_DD = ±5V, -40°C to +125°C",
+        "value": 4.65,
+        "value_unit": "V"
+      }
+    ],
+    "Power Supply Rejection Ratio": [
+      {
+        "qualifier": "Min",
+        "condition": "V_DD = 2.7V to 16V, V_IC = V_DD/2, No load, +25°C",
+        "value": 70,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "Typ",
+        "condition": "V_DD = 2.7V to 16V, V_IC = V_DD/2, No load, +25°C",
+        "value": 80,
+        "value_unit": "dB"
+      },
+      {
+        "qualifier": "Min",
+        "condition": "V_DD = 2.7V to 16V, V_IC = V_DD/2, No load, -40°C to +125°C",
+        "value": 65,
+        "value_unit": "dB"
+      }
+    ]
+  },
+  "tsb951": {
+    "Junction Temperature": [
+      {
+        "qualifier": "maximum",
+        "value": 150,
+        "value_unit": "°C"
+      }
+    ],
+    "ESD": [
+      {
+        "category": "Human Body Model (HBM)",
+        "value": 4000,
+        "value_unit": "V"
+      },
+      {
+        "category": "Charged Device Model (CDM)",
+        "value": 1500,
+        "value_unit": "V"
+      }
+    ],
+    "SR": [
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, A_V = 1 V/V, 10% to 90%",
+        "value": 18,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, A_V = 1 V/V, 10% to 90%",
+        "value": 26,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "Tmin < T < Tmax",
+        "value": 12,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, AV = 1 V/V, 10% to 90%",
+        "value": 21,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, AV = 1 V/V, 10% to 90%",
+        "value": 30,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "Tmin < T < Tmax",
+        "value": 16,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, AV = 1 V/V, 10% to 90%",
+        "value": 19,
+        "value_unit": "V/µs"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF, AV = 1 V/V, 10% to 90%",
+        "value": 28,
+        "value_unit": "V/µs"
+      }
+    ],
+    "GBP": [
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 31,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 47,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "Tmin < T < Tmax",
+        "value": 30,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 35,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 52,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "Tmin < T < Tmax",
+        "value": 33,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 34,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Typ.",
+        "condition": "R_L = 10 kΩ, C_L = 22 pF",
+        "value": 50,
+        "value_unit": "MHz"
+      },
+      {
+        "qualifier": "Min.",
+        "condition": "Tmin < T < Tmax",
+        "value": 32,
+        "value_unit": "MHz"
+      }
+    ]
+  }
+}

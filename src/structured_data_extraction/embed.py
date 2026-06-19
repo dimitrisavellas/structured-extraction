@@ -3,10 +3,8 @@ import json
 import logging
 import re
 from pathlib import Path
-
 import numpy as np
 from sentence_transformers import SentenceTransformer
-
 from . import config
 from .abbreviations import synonyms_for_keys
 
@@ -36,7 +34,7 @@ def _expand_key(key, vocab, synonyms=None):
     parts = [key]
     if expansions:
         parts.append(" ".join(expansions[:3]))
-   
+
     if synonyms:
         parts.extend(synonyms)
 
@@ -45,7 +43,37 @@ def _expand_key(key, vocab, synonyms=None):
     return key, key
 
 
+def _is_group_header(cells):
+    """Return True if this row looks like a group-header label rather than a data row."""
+    if len(cells) <= 1 or not cells[0]:
+        return False
+    empty_count = sum(1 for cell in cells[1:] if not cell)
+    standalone_nums = sum(
+        1 for cell in cells[1:]
+        if cell and re.match(r'^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$', cell.strip())
+    )
+    has_equals = '=' in cells[0]
+    return empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals
+
+
+def _parse_html_rows(content):
+    rows = []
+    for n, tr in enumerate(re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)):
+        cells = [re.sub(r"<[^>]+>", "", c).strip()
+                 for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)]
+        dedup = []
+        for c in cells:                       # collapse repeats from rowspan/colspan expansion
+            if not dedup or dedup[-1] != c:
+                dedup.append(c)
+        row_text = " | ".join(c for c in dedup if c)
+        if row_text.strip():
+            rows.append({"row_number": n, "row_text": row_text, "group_header": ""})
+    return rows
+
+
 def _parse_table_rows(content):
+    if "<tr" in content.lower():              # pre-embed refined tables are HTML, not markdown pipes
+        return _parse_html_rows(content)
     lines = content.strip().split('\n')
     rows = []
     group_header = ""
@@ -67,23 +95,13 @@ def _parse_table_rows(content):
         if not cells:
             continue
 
-        # Min/Typ/Max sub-header rows -- this check is load-bearing, don't generalize
+        
         non_empty = [cell for cell in cells if cell]
         if non_empty and all(cell in ('Min', 'Typ', 'Max') for cell in non_empty) and len(non_empty) >= 3:
             col_headers = cells
             continue
 
-        is_group = False
-        if len(cells) > 1 and cells[0]:
-            empty_count = sum(1 for cell in cells[1:] if not cell)
-            standalone_nums = sum(
-                1 for cell in cells[1:] if cell and re.match(r'^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$', cell.strip())
-            )
-            has_equals = '=' in cells[0]
-            if empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals:
-                is_group = True
-
-        if is_group:
+        if _is_group_header(cells):
             group_header = cells[0]
             row_text = ' | '.join(cell for cell in cells if cell)
             if row_text.strip():
@@ -109,32 +127,7 @@ def _parse_table_rows(content):
     return rows
 
 
-def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
-                             user_keys=None, model_name=None):
-    sections_path = Path(sections_path)
-    stem = sections_path.stem.replace("_sections", "")
-    out_dir = Path(config.INTERMEDIATE_DIR)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    sec_emb_path = out_dir / f"{stem}_section_embeddings.npy"
-    key_emb_path = out_dir / f"{stem}_key_embeddings.npy"
-    sec_txt_path = out_dir / f"{stem}_section_texts.json"
-    key_txt_path = out_dir / f"{stem}_key_texts.json"
-    rmap_path = out_dir / f"{stem}_row_map.json"
-
-    result = {
-        "section_embeddings_path": str(sec_emb_path),
-        "key_embeddings_path": str(key_emb_path),
-        "section_texts_path": str(sec_txt_path),
-        "key_texts_path": str(key_txt_path),
-        "row_map_path": str(rmap_path),
-    }
-
-    if (sec_emb_path.exists() and key_emb_path.exists() and sec_txt_path.exists()
-            and key_txt_path.exists() and rmap_path.exists()):
-        logger.info(f"Skipping embeddings — already exists for {stem}")
-        return result
-
+def _load_inputs(sections_path, tables_path, vocab_path):
     sections = json.loads(sections_path.read_text(encoding="utf-8"))
 
     tables = []
@@ -145,11 +138,23 @@ def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
     if vocab_path and Path(vocab_path).exists():
         vocab = json.loads(Path(vocab_path).read_text(encoding="utf-8"))
 
-    model = _load_model(model_name)
+    return sections, tables, vocab
 
+
+def _build_section_texts(sections, tables):
+    """Build per-section text list, replacing table sections with their cleaned markdown content."""
     sec_texts = [f"{section['type']}: {section['content']}" for section in sections]
     table_by_idx = {table["section_idx"]: table for table in tables}
+    for i, section in enumerate(sections):
+        if section.get("type") == "table" and i in table_by_idx:
+            cleaned = table_by_idx[i].get("content", "")
+            if cleaned:
+                sec_texts[i] = f"table: {cleaned}"
+    return sec_texts, table_by_idx
 
+
+def _parse_all_rows(sections, table_by_idx):
+    """Parse table rows from all table sections, return (row_texts, row_map)."""
     row_texts = []
     row_map = []
     for i, section in enumerate(sections):
@@ -158,7 +163,6 @@ def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
         cleaned = table_by_idx[i].get("content", "")
         if not cleaned:
             continue
-        sec_texts[i] = f"table: {cleaned}"
         for row_info in _parse_table_rows(cleaned):
             txt = row_info["row_text"]
             if row_info["group_header"]:
@@ -170,44 +174,85 @@ def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
                 "row_text": row_info["row_text"],
                 "group_header": row_info["group_header"],
             })
+    return row_texts, row_map
 
-    num_secs = len(sec_texts)
+
+def _expand_all_keys(user_keys, vocab, syn_map):
+    expansions = [_expand_key(key, vocab, syn_map.get(key)) for key in user_keys]
+    expanded = [pair[0] for pair in expansions]
+    originals = [pair[1] for pair in expansions]
+    return expanded, originals
+
+
+def _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals, row_map,
+                  num_sections, syn_map):
+    """Write all six output files for this stem."""
+    np.save(str(out_dir / f"{stem}_section_embeddings.npy"), all_embs)
+    np.save(str(out_dir / f"{stem}_key_embeddings.npy"), key_embs)
+    (out_dir / f"{stem}_section_texts.json").write_text(json.dumps(all_texts, indent=2), encoding="utf-8")
+    (out_dir / f"{stem}_key_texts.json").write_text(json.dumps(expanded, indent=2), encoding="utf-8")
+    (out_dir / f"{stem}_original_keys.json").write_text(json.dumps(originals, indent=2), encoding="utf-8")
+    rmap_data = {"num_sections": num_sections, "rows": row_map}
+    (out_dir / f"{stem}_row_map.json").write_text(
+        json.dumps(rmap_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (out_dir / f"{stem}_key_synonyms.json").write_text(
+        json.dumps(syn_map, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
+                             user_keys=None, model_name=None):
+    sections_path = Path(sections_path)
+    stem = sections_path.stem.replace("_sections", "")
+    out_dir = Path(config.INTERMEDIATE_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    combined_emb_path = out_dir / f"{stem}_section_embeddings.npy"
+    key_emb_path = out_dir / f"{stem}_key_embeddings.npy"
+    sec_txt_path = out_dir / f"{stem}_section_texts.json"
+    key_txt_path = out_dir / f"{stem}_key_texts.json"
+    rmap_path = out_dir / f"{stem}_row_map.json"
+
+    result = {
+        "section_embeddings_path": str(combined_emb_path),
+        "key_embeddings_path": str(key_emb_path),
+        "section_texts_path": str(sec_txt_path),
+        "key_texts_path": str(key_txt_path),
+        "row_map_path": str(rmap_path),
+    }
+
+    if (combined_emb_path.exists() and key_emb_path.exists() and sec_txt_path.exists()
+            and key_txt_path.exists() and rmap_path.exists()):
+        logger.info(f"Skipping embeddings — already exists for {stem}")
+        return result
+
+    sections, tables, vocab = _load_inputs(sections_path, tables_path, vocab_path)
+
+    sec_texts, table_by_idx = _build_section_texts(sections, tables)
+    row_texts, row_map = _parse_all_rows(sections, table_by_idx)
     logger.info(f"Parsed {len(row_map)} table rows")
 
     if user_keys is None:
         user_keys = []
-    # derive acronym/spelled-out synonyms from the document text and cache them so
-    # the extractor prompt can use the same list
+    # Derive acronym/spelled-out synonyms from the document text and cache them so
+    # the extractor prompt can use the same list.
     doc_text = "\n".join(section.get("content", "") for section in sections)
     syn_map = synonyms_for_keys(user_keys, doc_text)
-    (out_dir / f"{stem}_key_synonyms.json").write_text(
-        json.dumps(syn_map, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    expansions = [_expand_key(key, vocab, syn_map.get(key)) for key in user_keys]
-    expanded = [pair[0] for pair in expansions]
-    originals = [pair[1] for pair in expansions]
+    expanded, originals = _expand_all_keys(user_keys, vocab, syn_map)
 
-    # sections + rows go through one encode call (sections first, so search.py's
-    # num_sections split still holds). letting the model batch them together is
-    # a bit faster than two separate calls.
+    model = _load_model(model_name)
+
     all_texts = sec_texts + row_texts
     logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows and {len(expanded)} keys...")
     all_embs = model.encode(all_texts, show_progress_bar=False)
-
     key_embs = model.encode(expanded, show_progress_bar=False) if expanded else np.array([])
 
-    np.save(str(sec_emb_path), all_embs)
-    np.save(str(key_emb_path), key_embs)
-    sec_txt_path.write_text(json.dumps(all_texts, indent=2), encoding="utf-8")
-    key_txt_path.write_text(json.dumps(expanded, indent=2), encoding="utf-8")
+    _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals,
+                  row_map, len(sec_texts), syn_map)
 
-    orig_path = out_dir / f"{stem}_original_keys.json"
-    orig_path.write_text(json.dumps(originals, indent=2), encoding="utf-8")
-
-    rmap_data = {"num_sections": num_secs, "rows": row_map}
-    rmap_path.write_text(json.dumps(rmap_data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    logger.info(f"Saved embeddings: {all_embs.shape[0]} total ({num_secs} sections + {len(row_map)} rows)")
+    logger.info(f"Saved combined embeddings: {all_embs.shape[0]} total ({len(sec_texts)} sections + {len(row_map)} rows)")
 
     return result
 

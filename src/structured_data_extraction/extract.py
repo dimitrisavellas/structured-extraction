@@ -2,17 +2,14 @@ import argparse
 import json
 import logging
 import re
-import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
 import instructor
 from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
-from . import config
-from .table_filter import filter_html_table, filter_markdown_table
+from . import config, matching
 from .abbreviations import synonyms_for_keys
 from .tables import strip_code_fence
 
@@ -20,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 jinja_env = Environment(loader=FileSystemLoader(config.TEMPLATES_DIR))
-MAX_SECTION_CHARS = 5000 # cap for free-text/list sections only; tables aren't truncated
+MAX_SECTION_CHARS = 5000 
 
 
 class ExtractionMetadata(BaseModel):
@@ -52,7 +49,7 @@ def _build_extraction_model(schema, user_keys):
     field_defs = {}
 
     for key in user_keys:
-        field_name = re.sub(r'[^a-z0-9_]', '_', unicodedata.normalize("NFKC", key).lower())
+        field_name = matching.normalize_key(key)
         entry = schema.get(field_name)
         if not isinstance(entry, dict):
             entry = {}
@@ -101,67 +98,24 @@ def _merge_cleaned_tables(sections, tables):
                 merged_section["content"] = cleaned
                 merged_section["refined_format"] = table_by_idx[idx].get("refined_format", "")
 
-        # attach the most recent heading to every non-header section so the LLM
-        # has structural context regardless of section type
         if section.get("type") != "header" and last_header:
             merged_section["nearest_header"] = last_header
         merged.append(merged_section)
     return merged
 
 
-def _row_text_first_cell(row_text):
-    if not row_text:
-        return ""
-    cells = [cell.strip() for cell in row_text.split("|") if cell.strip()]
-    if not cells:
-        return ""
-    first = cells[0]
-    # row_text may have a "[col_header] value" annotation from step5 — strip it
-    if first.startswith("[") and "]" in first:
-        first = first.split("]", 1)[1].strip()
-    return first
-
-
-def _format_sections(sections, row_matches=None, max_chars=MAX_SECTION_CHARS):
-    matched_rows_by_idx = {}
-    matched_ids_by_idx = {}
-    if row_matches:
-        for match in row_matches:
-            if not match.get("is_row"):
-                continue
-            idx = match.get("section_idx")
-            matched_rows_by_idx.setdefault(idx, set()).add(match.get("row_number", -1))
-            first = _row_text_first_cell(match.get("row_text", ""))
-            if first:
-                matched_ids_by_idx.setdefault(idx, set()).add(first)
-            group_header = match.get("group_header") or ""
-            if group_header:
-                matched_ids_by_idx.setdefault(idx, set()).add(group_header)
-
+def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
     parts = []
     for i, section in enumerate(sections):
         sec_type = section.get("type", "unknown")
         sec_idx = section.get("section_idx", i)
         content = section.get("full_content", "") or section.get("content", "")
-        refined = section.get("refined_format", "")
         header = section.get("nearest_header", "")
 
         header_prefix = f"Surrounding section heading: {header}\n" if header else ""
 
-        if sec_type == "table" and content:
-            filtered = None
-            if refined == "html" and sec_idx in matched_ids_by_idx:
-                filtered = filter_html_table(content, matched_ids_by_idx[sec_idx])
-            elif sec_idx in matched_rows_by_idx:
-                filtered = filter_markdown_table(content, matched_rows_by_idx[sec_idx])
-
-            # tables are the high-value content: use the filtered group when we have
-            # one, otherwise send the whole table — never hard-cut it mid-row
-            if filtered:
-                content = filtered
-        else:
-            if len(content) > max_chars:
-                content = content[:max_chars] + "..."
+        if sec_type != "table" and len(content) > max_chars:
+            content = content[:max_chars] + "..."
 
         parts.append(f"[Section {sec_idx}] ({sec_type}):\n{header_prefix}{content}")
 
@@ -169,18 +123,16 @@ def _format_sections(sections, row_matches=None, max_chars=MAX_SECTION_CHARS):
 
 
 def _format_synonyms(synonyms):
-    # "cmrr → Common Mode Rejection Ratio" lines for the prompt; empty if none
     if not synonyms:
         return ""
     lines = [f"- {key} → {', '.join(values)}" for key, values in synonyms.items() if values]
     return "\n".join(lines)
 
 
-def discover_schema(markdown_text, matched_sections, vocab, user_keys, row_matches=None,
-                    synonyms=None):
+def discover_schema(markdown_text, matched_sections, vocab, user_keys, synonyms=None):
     template = jinja_env.get_template("schema_discovery.j2")
 
-    section_content = _format_sections(matched_sections, row_matches=row_matches)
+    section_content = _format_sections(matched_sections)
     vocab_terms = ", ".join(item["term"] for item in vocab[:30]) if vocab else "N/A"
 
     prompt = template.render(
@@ -203,7 +155,6 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, row_match
     try:
         schema = json.loads(raw)
         if isinstance(schema, dict):
-            # the model emits _document_type alongside the field defs; pop it out
             doc_type = schema.pop("_document_type", "unknown")
             if not isinstance(doc_type, str) or not doc_type.strip():
                 doc_type = "unknown"
@@ -214,12 +165,12 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, row_match
 
 
 def extract_values(client, matched_sections, vocab, user_keys, schema,
-                   document_type="unknown", source_file="", row_matches=None,
+                   document_type="unknown", source_file="",
                    model=None, synonyms=None):
     model = model or config.OLLAMA_EXTRACT_MODEL
     template = jinja_env.get_template("extraction.j2")
 
-    section_content = _format_sections(matched_sections, row_matches=row_matches)
+    section_content = _format_sections(matched_sections)
     vocab_terms = ", ".join(item["term"] for item in vocab[:30]) if vocab else "N/A"
 
     prompt = template.render(
@@ -278,8 +229,20 @@ def _dedup_extraction(extraction):
     return deduped
 
 
+def _neighbor_line(sections, idx, side):
+    j = idx - 1 if side == "prev" else idx + 1
+    if not 0 <= j < len(sections):
+        return ""
+    neighbor = sections[j]
+    if neighbor.get("type") in ("header", "table"):
+        return ""
+    lines = [ln for ln in (neighbor.get("content") or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    return lines[-1] if side == "prev" else lines[0]
+
+
 def _prepare_sections(matches_path, sections_path, vocab_path, markdown_path, tables_path):
-    # shared loading + matched-section prep used by both extract paths
     matches = json.loads(Path(matches_path).read_text(encoding="utf-8"))
     sections = json.loads(Path(sections_path).read_text(encoding="utf-8"))
     vocab = json.loads(Path(vocab_path).read_text(encoding="utf-8"))
@@ -293,47 +256,63 @@ def _prepare_sections(matches_path, sections_path, vocab_path, markdown_path, ta
         md_text = Path(markdown_path).read_text(encoding="utf-8")
 
     best_by_idx = {}
-    row_matches = []
     for key_matches in matches.values():
         for match in key_matches:
             idx = match.get("section_idx", 0)
             enriched = dict(match)
             if idx < len(sections):
-                enriched["full_content"] = sections[idx].get("content", "")
-                enriched["type"] = sections[idx].get("type", "unknown")
-                enriched["refined_format"] = sections[idx].get("refined_format", "")
-            if enriched.get("is_row"):
-                row_matches.append(enriched)
+                content = sections[idx].get("content", "")
+                sec_type = sections[idx].get("type", "unknown")
+                if sec_type != "table":
+                    # widen by one neighbor line each side so an orphaned label keeps
+                    # its value (and vice versa)
+                    prev_line = _neighbor_line(sections, idx, "prev")
+                    next_line = _neighbor_line(sections, idx, "next")
+                    content = "\n".join(p for p in (prev_line, content, next_line) if p)
+                enriched["full_content"] = content
+                enriched["type"] = sec_type
             similarity = enriched.get("similarity", 0)
             if idx not in best_by_idx or similarity > best_by_idx[idx].get("similarity", 0):
                 best_by_idx[idx] = enriched
 
     unique = sorted(best_by_idx.values(), key=lambda x: x.get("similarity", 0), reverse=True)
-    return md_text, vocab, unique, row_matches
-
-
-def _build_extraction_result(stem, doc_type, schema, user_keys, num_unique,
-                             extraction, extraction_model, slug=None):
-    timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    fdo_id = f"fdo:{stem}:{slug}:{timestamp}" if slug else f"fdo:{stem}:{timestamp}"
-    return {
-        "id": fdo_id, "type": "ExtractionResult",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "provenance": {
-            "source_file": f"{stem}.pdf", "document_type": doc_type,
-            "pipeline_version": config.PIPELINE_VERSION,
-            "models": {"schema_discovery": config.OLLAMA_SCHEMA_MODEL,
-                       "extraction": extraction_model,
-                       "vision": config.OLLAMA_VISION_MODEL,
-                       "embedding": config.EMBEDDING_MODEL},
-            "user_keys": user_keys, "matched_sections": num_unique,
-            "schema_fields": list(schema.keys()),
-        }, **extraction,
-    }
+    return md_text, vocab, unique
 
 
 def _model_slug(model_name):
     return re.sub(r'[^a-z0-9]+', '_', model_name.lower()).strip('_')
+
+
+def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type, synonyms):
+    slug = _model_slug(model_name)
+    out_path = out_dir / f"{stem}_extraction_{slug}.json"
+    if out_path.exists():
+        logger.info(f"[{model_name}] already exists, skipping")
+        return json.loads(out_path.read_text(encoding="utf-8"))
+
+    client = _get_client()
+    extraction = extract_values(client, unique, vocab, user_keys, schema,
+                                doc_type, f"{stem}.pdf",
+                                model=model_name, synonyms=synonyms)
+
+    pre = sum(len(v) for v in extraction.values())
+    extraction = _dedup_extraction(extraction)
+    post = sum(len(v) for v in extraction.values())
+    if post < pre:
+        logger.info(f"[{model_name}] Dedup: {pre} → {post}")
+
+    # tag each record with which model produced it
+    for records in extraction.values():
+        for record in records:
+            metadata = record.get("metadata")
+            if isinstance(metadata, dict):
+                metadata["document_type"] = doc_type
+                metadata["model"] = model_name
+
+    total = sum(len(v) for v in extraction.values())
+    out_path.write_text(json.dumps(extraction, indent=2, ensure_ascii=False), encoding="utf-8")
+    logger.info(f"[{model_name}] Extracted {total} records → {out_path}")
+    return extraction
 
 
 def extract_parallel(matches_path, sections_path, vocab_path, user_keys,
@@ -344,58 +323,26 @@ def extract_parallel(matches_path, sections_path, vocab_path, user_keys,
 
     models = config.EXTRACTION_MODELS
 
-    md_text, vocab, unique, row_matches = _prepare_sections(
+    md_text, vocab, unique = _prepare_sections(
         matches_path, sections_path, vocab_path, markdown_path, tables_path)
 
-    # acronym/spelled-out synonyms — reuse what embed cached, else derive from text
+    # acronym/spelled-out synonyms, reuse what embed cached, else derive from text
     syn_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_key_synonyms.json"
     if syn_path.exists():
         synonyms = json.loads(syn_path.read_text(encoding="utf-8"))
     else:
         synonyms = synonyms_for_keys(user_keys, md_text)
 
-    # schema discovery runs once for all models
-    doc_type, schema = discover_schema(md_text, unique, vocab, user_keys, row_matches,
-                                       synonyms=synonyms)
+    # schema discovery once for all models
+    doc_type, schema = discover_schema(md_text, unique, vocab, user_keys, synonyms=synonyms)
     logger.info(f"Schema: document_type='{doc_type}'")
-
-    def run_one_model(model_name):
-        slug = _model_slug(model_name)
-        out_path = out_dir / f"{stem}_extraction_{slug}.json"
-        if out_path.exists():
-            logger.info(f"[{model_name}] already exists, skipping")
-            return json.loads(out_path.read_text(encoding="utf-8"))
-
-        client = _get_client()
-        extraction = extract_values(client, unique, vocab, user_keys, schema,
-                                    doc_type, f"{stem}.pdf", row_matches,
-                                    model=model_name, synonyms=synonyms)
-
-        pre = sum(len(v) for v in extraction.values())
-        extraction = _dedup_extraction(extraction)
-        post = sum(len(v) for v in extraction.values())
-        if post < pre:
-            logger.info(f"[{model_name}] Dedup: {pre} → {post}")
-
-        # tag each record with which model produced it
-        for records in extraction.values():
-            for record in records:
-                metadata = record.get("metadata")
-                if isinstance(metadata, dict):
-                    metadata["document_type"] = doc_type
-                    metadata["model"] = model_name
-
-        result = _build_extraction_result(stem, doc_type, schema, user_keys, len(unique),
-                                           extraction, model_name, slug=slug)
-
-        total = sum(len(v) for v in extraction.values())
-        out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-        logger.info(f"[{model_name}] Extracted {total} records → {out_path}")
-        return result
 
     results = []
     with ThreadPoolExecutor(max_workers=config.EXTRACTION_WORKERS) as pool:
-        futures = {pool.submit(run_one_model, m): m for m in models}
+        futures = {
+            pool.submit(_run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type, synonyms): m
+            for m in models
+        }
         for fut in as_completed(futures):
             model_name = futures[fut]
             try:
@@ -424,8 +371,8 @@ if __name__ == "__main__":
         markdown_path=str(md_dir / f"{args.stem}.md"),
         tables_path=str(int_dir / f"{args.stem}_tables.json"),
     )
-    meta_keys = {"id", "type", "generated_at", "provenance"}
     for result in results:
-        total = sum(len(records) for field, records in result.items() if field not in meta_keys)
-        model = result.get("provenance", {}).get("models", {}).get("extraction", "?")
+        total = sum(len(records) for records in result.values())
+        model = next((rec.get("metadata", {}).get("model")
+                      for records in result.values() for rec in records), "?")
         print(f"{model}: {total} records")

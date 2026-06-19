@@ -8,7 +8,7 @@ from . import config
 from .convert import convert_pdf
 from .vocab import extract_vocab
 from .classify_sections import classify_sections
-from .tables import process_tables, refine_matched_tables
+from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
 from .embed import embed_sections_and_keys
 from .search import search
 from .extract import extract_parallel
@@ -39,6 +39,11 @@ def process_single_pdf(pdf_path, user_keys):
     classify_sections(stem)
 
     process_tables(str(sections_path), pdf_path=str(pdf_path))
+
+    # tables Docling stripped to bare symbols can't be retrieved, so they'd never reach the
+    # lazy-vision step below; de-garble them now so their recovered text gets embedded
+    if tables_file.exists():
+        refine_symbol_only_tables(str(tables_file))
 
     embed_sections_and_keys(
         sections_path=str(sections_path),

@@ -22,3 +22,5 @@ markdown/
 *.egg-info/
 .pytest_cache/
 
+extras 
+validation-set

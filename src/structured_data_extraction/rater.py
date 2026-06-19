@@ -1,163 +1,186 @@
-## work in progress, not yet ready for use
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
-from rapidfuzz import fuzz
 from sklearn.metrics import cohen_kappa_score
 from . import config
-
-THRESHOLD = 0.85
-
-
-def normalize(s):
-    return str(s).strip().casefold()
+from .matching import same_fact, _empty, _as_number, _norm_text, _norm_unit, _META_FIELDS
 
 
-def to_number(val):
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return normalize(val)
+def _model_slug(model_name):
+    return re.sub(r"[^a-z0-9]+", "_", model_name.lower()).strip("_")
 
 
-class Record:
-    def __init__(self, model, data):
-        self.model = model
-        self.exact = {}  
-        self.text = {}   
-        for key in sorted(data):
-            val = data[key]
-            if key == "metadata":
+def _filled_fields(rec):
+    return sum(1 for k, v in rec.items() if k not in _META_FIELDS and not _empty(v))
+
+
+def fuse(records_by_model):
+    pool = [(m, r) for m, recs in records_by_model.items() for r in recs]
+    used = set()
+    clusters = []
+    for i, (model, rec) in enumerate(pool):
+        if i in used:
+            continue
+        used.add(i)
+        cluster = {model: rec}
+        for j in range(i + 1, len(pool)):
+            mj, rj = pool[j]
+            if j in used or mj in cluster:
                 continue
-            elif key == "unit" or key.endswith("_unit"):
-                self.exact[key] = str(val).strip()
-            elif key == "value" or isinstance(val, (int, float)):
-                self.exact[key] = to_number(val)
-            else:
-                self.text[key] = str(val)
+            if same_fact(rec, rj):
+                used.add(j)
+                cluster[mj] = rj
+        clusters.append(cluster)
+    return clusters
 
-    @property
-    def fields(self):
-        # the original schema fields of this record, sorted
-        merged = {**self.exact, **self.text}
-        return {k: merged[k] for k in sorted(merged)}
 
-    def matches(self, other):
-        if self.exact != other.exact:
+def consensus(cluster, n_models):
+    rep = max(cluster.values(), key=_filled_fields)
+    fields = {k: v for k, v in rep.items() if k != "metadata"}
+    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster), **fields}
+
+
+def _fields_match(f, va, vb):
+    """Return True if va and vb are the same value for field f (strict equality, no fuzzing)."""
+    na, nb = _as_number(va), _as_number(vb)
+    if na is not None and nb is not None:
+        return na == nb
+    if f == "unit" or f.endswith("_unit"):
+        return _norm_unit(va) == _norm_unit(vb)
+    return _norm_text(va) == _norm_text(vb)
+
+
+def _strict_eq(a, b):
+    for f in (set(a) | set(b)) - _META_FIELDS:
+        va, vb = a.get(f), b.get(f)
+        if _empty(va) or _empty(vb):
+            continue
+        if not _fields_match(f, va, vb):
             return False
-        for key, val in self.text.items():
-            ov = other.text.get(key, "")
-
-            if val and ov and fuzz.ratio(val, ov, processor=normalize) < THRESHOLD * 100:
-                return False
-        return True
+    return True
 
 
-class Records:
-    def __init__(self):
-        self.by_model = defaultdict(list)
-
-    def add(self, model, data):
-        self.by_model[model].append(Record(model, data))
-
-    def cluster(self):
-        pool = [r for records in self.by_model.values() for r in records]
-        used = set()
-        facts = []
-        for seed in pool:
-            if id(seed) in used:
-                continue
-            used.add(id(seed))
-            fact = {seed.model: seed}
-            for other in pool:
-                if id(other) in used or other.model in fact:
-                    continue
-                if seed.matches(other):
-                    used.add(id(other))
-                    fact[other.model] = other
-            facts.append(fact)
-        return facts
+def _merge_into(existing, incoming, n_models):
+    models = sorted(set(existing["models"]) | set(incoming["models"]))
+    rep = max((existing, incoming), key=_filled_fields)
+    return {**{k: v for k, v in rep.items() if k not in _META_FIELDS},
+            "confidence": round(len(models) / n_models, 2),
+            "models": models}
 
 
-def load():
-    strata = defaultdict(Records)
-    loaded = 0
-    for f in sorted(Path(config.OUTPUT_DIR).glob("*.json")):
-        ex = json.loads(f.read_text(encoding="utf-8"))
-        if ex.get("type") != "ExtractionResult":
-            continue 
-        loaded += 1
-        file = ex["provenance"]["source_file"]
-        model = ex["provenance"]["models"]["extraction"]
-        for key in ex["provenance"]["schema_fields"]:
-            if key not in ex:
-                print(f"  warning: {f.name}: schema field {key!r} missing from output, skipping")
-                continue
-            for row in ex[key]:
-                strata[(file, key)].add(model, row)
-    print(f"loaded {loaded} files")
-    return strata
+def dedup(facts, n_models):
+    merged = []
+    for fact in facts:
+        match_idx = next((i for i, kept in enumerate(merged) if _strict_eq(fact, kept)), None)
+        if match_idx is not None:
+            merged[match_idx] = _merge_into(merged[match_idx], fact, n_models)
+        else:
+            merged.append(fact)
+    return merged
 
 
-def fact_entry(fact, n):
-    r = next(iter(fact.values()))
-    return {"confidence": round(len(fact) / n, 2), "models": sorted(fact), **r.fields}
+def load_outputs():
+    by_file = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    slug_to_model = {_model_slug(m): m for m in config.EXTRACTION_MODELS}
+    for path in sorted(Path(config.OUTPUT_DIR).glob("*_extraction_*.json")):
+        stem, _, slug = path.stem.rpartition("_extraction_")
+        model = slug_to_model.get(slug)
+        if model is None:
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+
+        for field, records in data.items():
+            if isinstance(records, list):
+                by_file[stem][field][model].extend(records)
+    return by_file
 
 
-def agreement(all_facts, raters):
-    # pairwise Cohen's kappa over presence/absence of every fact
-    present = {m: [1 if m in fact else 0 for fact in all_facts] for m in raters}
+def fuse_outputs(by_file, models):
+    n = len(models)
+    facts = []
+    for stem, fields in sorted(by_file.items()):
+        for field, recs_by_model in sorted(fields.items()):
+            clusters = fuse({m: recs_by_model.get(m, []) for m in models})
+            for f in dedup([consensus(c, n) for c in clusters], n):
+                facts.append({"source_file": f"{stem}.pdf", "field": field, **f})
+    return facts
+
+
+def _group_by_doc(facts):
+    grouped = defaultdict(lambda: defaultdict(list))
+    for f in facts:
+        stem = Path(f["source_file"]).stem
+        grouped[stem][f["field"]].append({k: v for k, v in f.items()
+                                          if k not in ("source_file", "field")})
+    return {stem: dict(fields) for stem, fields in grouped.items()}
+
+
+def majority_cutoff(n):
+    return n // 2 + 1
+
+
+def rate(by_file, models):
+    n = len(models)
+    Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    all_facts = fuse_outputs(by_file, models)
+
+    # fused.json is for full view 
+    fused_path = Path(config.OUTPUT_DIR) / "fused.json"
+    fused_path.write_text(json.dumps(_group_by_doc(all_facts), indent=2, ensure_ascii=False),
+                          encoding="utf-8")
+
+    cutoff = majority_cutoff(n)
+    user_facts = [f for f in all_facts if len(f["models"]) >= cutoff]
+    user_path = Path(config.OUTPUT_DIR) / "user_report.json"
+    user_path.write_text(json.dumps(_group_by_doc(user_facts), indent=2, ensure_ascii=False),
+                         encoding="utf-8")
+
+    rows = agreement(all_facts, models)
+    report = {
+        "models": models,
+        "facts": len(all_facts),
+        "full_agreement": sum(1 for f in all_facts if len(f["models"]) == n),
+        "agreement": rows,
+        "partial_agreement": [f for f in all_facts if len(f["models"]) < n],
+    }
+    out = Path(config.OUTPUT_DIR) / "rating_report.json"
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    _print_agreement(len(all_facts), rows)
+    print(f"\nwrote {out}\nwrote {fused_path}\nwrote {user_path}")
+
+
+def agreement(facts, models):
+    if not facts:
+        return []
+    present = {m: [1 if m in f["models"] else 0 for f in facts] for m in models}
     rows = []
-    for i, a in enumerate(raters):
-        for b in raters[i + 1:]:
-            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(all_facts)
+    for i, a in enumerate(models):
+        for b in models[i + 1:]:
+            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(facts)
             if len(set(present[a] + present[b])) < 2:
-                # both raters gave the same answer to every fact -> kappa is undefined
-                kappa = "n/a (no disagreement)"
+                # cohen_kappa_score requires at least two label classes; skip if all labels are identical
+                kappa = None
             else:
                 kappa = round(cohen_kappa_score(present[a], present[b], labels=[0, 1]), 3)
             rows.append({"raters": [a, b], "kappa": kappa, "agreement": round(agree, 4)})
     return rows
 
 
-def build_report(file, file_strata, raters):
-    fields = {}
-    all_facts = []
-    for key, records in sorted(file_strata.items()):
-        n = len(records.by_model)
-        facts = records.cluster()
-        all_facts += facts
-        full = sum(len(fact) == n for fact in facts)
-        entries = [fact_entry(fact, n) for fact in facts]
-        fields[key] = {"facts": len(facts), "full_agreement": full, "facts_list": entries}
-
-    report = {"source_file": file, "raters": raters, "fields": fields}
-    if all_facts:
-        report["agreement"] = agreement(all_facts, raters)
-        print(f"\n[{file}] inter-rater agreement over {len(all_facts)} facts:")
-        for row in report["agreement"]:
-            a, b = row["raters"]
-            print(f"  {a} ↔ {b}: kappa={row['kappa']}, agreement={row['agreement']:.1%}")
-    return report
+def _print_agreement(n_facts, rows):
+    print(f"\ninter-rater agreement across {n_facts} facts (all files):")
+    for row in rows:
+        a, b = row["raters"]
+        kappa = "n/a" if row["kappa"] is None else row["kappa"]
+        print(f"  {a} <-> {b}: kappa={kappa}, agreement={row['agreement']:.1%}")
 
 
 def main():
-    strata = load()
-    if not strata:
-        print("No extraction outputs found.")
+    by_file = load_outputs()
+    if not by_file:
+        print(f"No extraction outputs found in {config.OUTPUT_DIR}")
         return
-
-    raters = config.EXTRACTION_MODELS[:3]
-
-    by_file = defaultdict(dict)
-    for (file, key), records in strata.items():
-        by_file[file][key] = records
-
-    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    for file, file_strata in sorted(by_file.items()):
-        report = build_report(file, file_strata, raters)
-        out = config.OUTPUT_DIR / f"{Path(file).stem}_rating.json"
-        out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    rate(by_file, config.EXTRACTION_MODELS)
 
 
 if __name__ == "__main__":
