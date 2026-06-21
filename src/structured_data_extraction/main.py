@@ -3,11 +3,10 @@ import json
 import logging
 import sys
 from pathlib import Path
-
 from . import config
 from .convert import convert_pdf
 from .vocab import extract_vocab
-from .classify_sections import classify_sections
+from .classify import classify_sections
 from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
 from .embed import embed_sections_and_keys
 from .search import search
@@ -26,7 +25,6 @@ def process_single_pdf(pdf_path, user_keys):
     stem = pdf_path.stem
     int_dir = Path(config.INTERMEDIATE_DIR)
     sections_path = int_dir / f"{stem}_sections.json"
-    vocab_path = int_dir / f"{stem}_vocab.json"
     tables_file = int_dir / f"{stem}_tables.json"
     logger.info(f"=== Processing {pdf_path.name} ===")
 
@@ -45,22 +43,9 @@ def process_single_pdf(pdf_path, user_keys):
     if tables_file.exists():
         refine_symbol_only_tables(str(tables_file))
 
-    embed_sections_and_keys(
-        sections_path=str(sections_path),
-        tables_path=str(tables_file) if tables_file.exists() else None,
-        vocab_path=str(vocab_path),
-        user_keys=user_keys,
-    )
+    embed_sections_and_keys(stem, user_keys=user_keys)
 
-    matches = search(
-        section_embeddings_path=str(int_dir / f"{stem}_section_embeddings.npy"),
-        key_embeddings_path=str(int_dir / f"{stem}_key_embeddings.npy"),
-        section_texts_path=str(int_dir / f"{stem}_section_texts.json"),
-        key_texts_path=str(int_dir / f"{stem}_key_texts.json"),
-        sections_path=str(sections_path),
-        original_keys=user_keys,
-        row_map_path=str(int_dir / f"{stem}_row_map.json"),
-    )
+    matches = search(stem, original_keys=user_keys)
 
     # refine matched complex tables with vision model
     matched_idxs = {
@@ -73,14 +58,7 @@ def process_single_pdf(pdf_path, user_keys):
         logger.info("Refining matched complex tables...")
         refine_matched_tables(str(tables_file), matched_idxs)
 
-    results = extract_parallel(
-        matches_path=str(int_dir / f"{stem}_matches.json"),
-        sections_path=str(sections_path),
-        vocab_path=str(vocab_path),
-        user_keys=user_keys,
-        markdown_path=str(Path(config.MARKDOWN_DIR) / f"{stem}.md"),
-        tables_path=str(tables_file) if tables_file.exists() else None,
-    )
+    results = extract_parallel(stem, user_keys)
 
     logger.info(f"=== Done with {pdf_path.name} ===")
     return results

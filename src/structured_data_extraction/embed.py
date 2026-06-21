@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from . import config
-from .abbreviations import synonyms_for_keys
+from .paths import inter, read_json, write_json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def _load_model(model_name=None):
     return SentenceTransformer(name, device=config.EMBEDDING_DEVICE, trust_remote_code=True)
 
 
-def _expand_key(key, vocab, synonyms=None):
+def _expand_key(key, vocab):
     if not config.EXPAND_KEYS:
         return key, key
 
@@ -31,15 +31,8 @@ def _expand_key(key, vocab, synonyms=None):
         if key_lower in term_lower or all(word in term_words for word in key_words):
             expansions.append(item["term"])
 
-    parts = [key]
     if expansions:
-        parts.append(" ".join(expansions[:3]))
-
-    if synonyms:
-        parts.extend(synonyms)
-
-    if len(parts) > 1:
-        return " ".join(parts), key
+        return " ".join([key, " ".join(expansions[:3])]), key
     return key, key
 
 
@@ -127,20 +120,6 @@ def _parse_table_rows(content):
     return rows
 
 
-def _load_inputs(sections_path, tables_path, vocab_path):
-    sections = json.loads(sections_path.read_text(encoding="utf-8"))
-
-    tables = []
-    if tables_path and Path(tables_path).exists():
-        tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
-
-    vocab = []
-    if vocab_path and Path(vocab_path).exists():
-        vocab = json.loads(Path(vocab_path).read_text(encoding="utf-8"))
-
-    return sections, tables, vocab
-
-
 def _build_section_texts(sections, tables):
     """Build per-section text list, replacing table sections with their cleaned markdown content."""
     sec_texts = [f"{section['type']}: {section['content']}" for section in sections]
@@ -177,57 +156,37 @@ def _parse_all_rows(sections, table_by_idx):
     return row_texts, row_map
 
 
-def _expand_all_keys(user_keys, vocab, syn_map):
-    expansions = [_expand_key(key, vocab, syn_map.get(key)) for key in user_keys]
+def _expand_all_keys(user_keys, vocab):
+    expansions = [_expand_key(key, vocab) for key in user_keys]
     expanded = [pair[0] for pair in expansions]
     originals = [pair[1] for pair in expansions]
     return expanded, originals
 
 
 def _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals, row_map,
-                  num_sections, syn_map):
-    """Write all six output files for this stem."""
+                  num_sections):
+    """Write the embedding + text artifacts for this stem."""
     np.save(str(out_dir / f"{stem}_section_embeddings.npy"), all_embs)
     np.save(str(out_dir / f"{stem}_key_embeddings.npy"), key_embs)
-    (out_dir / f"{stem}_section_texts.json").write_text(json.dumps(all_texts, indent=2), encoding="utf-8")
-    (out_dir / f"{stem}_key_texts.json").write_text(json.dumps(expanded, indent=2), encoding="utf-8")
-    (out_dir / f"{stem}_original_keys.json").write_text(json.dumps(originals, indent=2), encoding="utf-8")
-    rmap_data = {"num_sections": num_sections, "rows": row_map}
-    (out_dir / f"{stem}_row_map.json").write_text(
-        json.dumps(rmap_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    (out_dir / f"{stem}_key_synonyms.json").write_text(
-        json.dumps(syn_map, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    write_json(out_dir / f"{stem}_section_texts.json", all_texts)
+    write_json(out_dir / f"{stem}_key_texts.json", expanded)
+    write_json(out_dir / f"{stem}_original_keys.json", originals)
+    write_json(out_dir / f"{stem}_row_map.json", {"num_sections": num_sections, "rows": row_map})
 
 
-def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
-                             user_keys=None, model_name=None):
-    sections_path = Path(sections_path)
-    stem = sections_path.stem.replace("_sections", "")
+def embed_sections_and_keys(stem, user_keys=None, model_name=None):
     out_dir = Path(config.INTERMEDIATE_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    combined_emb_path = out_dir / f"{stem}_section_embeddings.npy"
-    key_emb_path = out_dir / f"{stem}_key_embeddings.npy"
-    sec_txt_path = out_dir / f"{stem}_section_texts.json"
-    key_txt_path = out_dir / f"{stem}_key_texts.json"
-    rmap_path = out_dir / f"{stem}_row_map.json"
-
-    result = {
-        "section_embeddings_path": str(combined_emb_path),
-        "key_embeddings_path": str(key_emb_path),
-        "section_texts_path": str(sec_txt_path),
-        "key_texts_path": str(key_txt_path),
-        "row_map_path": str(rmap_path),
-    }
-
-    if (combined_emb_path.exists() and key_emb_path.exists() and sec_txt_path.exists()
-            and key_txt_path.exists() and rmap_path.exists()):
+    artifacts = [inter(stem, n) for n in ("section_embeddings.npy", "key_embeddings.npy",
+                 "section_texts.json", "key_texts.json", "row_map.json")]
+    if all(p.exists() for p in artifacts):
         logger.info(f"Skipping embeddings — already exists for {stem}")
-        return result
+        return
 
-    sections, tables, vocab = _load_inputs(sections_path, tables_path, vocab_path)
+    sections = read_json(inter(stem, "sections.json"))
+    tables = read_json(inter(stem, "tables.json")) if inter(stem, "tables.json").exists() else []
+    vocab = read_json(inter(stem, "vocab.json")) if inter(stem, "vocab.json").exists() else []
 
     sec_texts, table_by_idx = _build_section_texts(sections, tables)
     row_texts, row_map = _parse_all_rows(sections, table_by_idx)
@@ -235,40 +194,30 @@ def embed_sections_and_keys(sections_path, tables_path=None, vocab_path=None,
 
     if user_keys is None:
         user_keys = []
-    # Derive acronym/spelled-out synonyms from the document text and cache them so
-    # the extractor prompt can use the same list.
-    doc_text = "\n".join(section.get("content", "") for section in sections)
-    syn_map = synonyms_for_keys(user_keys, doc_text)
 
-    expanded, originals = _expand_all_keys(user_keys, vocab, syn_map)
+    expanded, originals = _expand_all_keys(user_keys, vocab)
 
     model = _load_model(model_name)
 
     all_texts = sec_texts + row_texts
     logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows and {len(expanded)} keys...")
-    all_embs = model.encode(all_texts, show_progress_bar=False)
-    key_embs = model.encode(expanded, show_progress_bar=False) if expanded else np.array([])
+    # nomic-embed-v1.5 needs task prefixes: documents vs queries. Without them all
+    # cosine sims are depressed and real matches get clipped under the 0.55 gate.
+    all_embs = model.encode([f"search_document: {t}" for t in all_texts], show_progress_bar=False)
+    key_embs = (model.encode([f"search_query: {k}" for k in expanded], show_progress_bar=False)
+                if expanded else np.array([]))
 
     _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals,
-                  row_map, len(sec_texts), syn_map)
+                  row_map, len(sec_texts))
 
     logger.info(f"Saved combined embeddings: {all_embs.shape[0]} total ({len(sec_texts)} sections + {len(row_map)} rows)")
-
-    return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Embed sections and keys")
-    parser.add_argument("--sections", required=True)
-    parser.add_argument("--tables")
-    parser.add_argument("--vocab")
+    parser.add_argument("--stem", required=True)
     parser.add_argument("--keys", nargs="+")
     parser.add_argument("--model")
     args = parser.parse_args()
-
-    result = embed_sections_and_keys(
-        sections_path=args.sections, tables_path=args.tables,
-        vocab_path=args.vocab, user_keys=args.keys,
-        model_name=args.model,
-    )
-    print(f"Done: {result}")
+    embed_sections_and_keys(args.stem, user_keys=args.keys, model_name=args.model)
+    print("Done")

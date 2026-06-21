@@ -27,6 +27,9 @@ OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "ollama")
 MAX_LLM_RETRIES = 3
 PIPELINE_VERSION = "1.0"
+# ponytail: best-effort reproducibility. Remote :cloud models may ignore `seed`;
+# real determinism comes from the cached intermediate JSON, not the API.
+SEED = 0
 
 # embedding
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")

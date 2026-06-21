@@ -4,10 +4,6 @@ You are a document analysis expert. Your task is to discover the extraction sche
 
 The user wants to extract the following keys from this document:
 {{ user_keys }}
-{% if key_synonyms %}
-These keys have equivalent forms found in this document (an acronym and its spelled-out phrase refer to the SAME quantity — treat them as one key, and mention the alternate form in the field's description so the extractor recognizes both):
-{{ key_synonyms }}
-{% endif %}
 
 ## Domain Vocabulary
 

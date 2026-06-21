@@ -145,6 +145,7 @@ def _call_model(model, messages):
         model=model,
         messages=messages,
         temperature=0.0,
+        seed=config.SEED,
     )
     return strip_code_fence(resp.choices[0].message.content.strip())
 

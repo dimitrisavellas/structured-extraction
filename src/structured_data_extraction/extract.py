@@ -10,7 +10,7 @@ from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
 from . import config, matching
-from .abbreviations import synonyms_for_keys
+from .paths import inter, read_json, cached
 from .tables import strip_code_fence
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -122,14 +122,7 @@ def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
     return "\n\n".join(parts)
 
 
-def _format_synonyms(synonyms):
-    if not synonyms:
-        return ""
-    lines = [f"- {key} → {', '.join(values)}" for key, values in synonyms.items() if values]
-    return "\n".join(lines)
-
-
-def discover_schema(markdown_text, matched_sections, vocab, user_keys, synonyms=None):
+def discover_schema(markdown_text, matched_sections, vocab, user_keys):
     template = jinja_env.get_template("schema_discovery.j2")
 
     section_content = _format_sections(matched_sections)
@@ -139,7 +132,6 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, synonyms=
         section_content=section_content,
         vocab_terms=vocab_terms,
         user_keys=", ".join(user_keys),
-        key_synonyms=_format_synonyms(synonyms),
         document_preview=markdown_text[:5000],
     )
 
@@ -149,6 +141,7 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, synonyms=
         model=config.OLLAMA_SCHEMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
+        seed=config.SEED,
     )
     raw = strip_code_fence(resp.choices[0].message.content.strip())
 
@@ -165,8 +158,7 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys, synonyms=
 
 
 def extract_values(client, matched_sections, vocab, user_keys, schema,
-                   document_type="unknown", source_file="",
-                   model=None, synonyms=None):
+                   document_type="unknown", source_file="", model=None):
     model = model or config.OLLAMA_EXTRACT_MODEL
     template = jinja_env.get_template("extraction.j2")
 
@@ -178,7 +170,6 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
         section_content=section_content,
         vocab_terms=vocab_terms,
         user_keys=", ".join(user_keys),
-        key_synonyms=_format_synonyms(synonyms),
         schema=json.dumps(schema, indent=2),
         source_file=source_file,
     )
@@ -194,6 +185,7 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
+                seed=config.SEED,
                 response_model=extraction_model,
             )
             output = {}
@@ -242,18 +234,16 @@ def _neighbor_line(sections, idx, side):
     return lines[-1] if side == "prev" else lines[0]
 
 
-def _prepare_sections(matches_path, sections_path, vocab_path, markdown_path, tables_path):
-    matches = json.loads(Path(matches_path).read_text(encoding="utf-8"))
-    sections = json.loads(Path(sections_path).read_text(encoding="utf-8"))
-    vocab = json.loads(Path(vocab_path).read_text(encoding="utf-8"))
+def _prepare_sections(stem):
+    matches = read_json(inter(stem, "matches.json"))
+    sections = read_json(inter(stem, "sections.json"))
+    vocab = read_json(inter(stem, "vocab.json"))
 
-    if tables_path and Path(tables_path).exists():
-        tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
-        sections = _merge_cleaned_tables(sections, tables)
+    if inter(stem, "tables.json").exists():
+        sections = _merge_cleaned_tables(sections, read_json(inter(stem, "tables.json")))
 
-    md_text = ""
-    if markdown_path and Path(markdown_path).exists():
-        md_text = Path(markdown_path).read_text(encoding="utf-8")
+    md_path = Path(config.MARKDOWN_DIR) / f"{stem}.md"
+    md_text = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
 
     best_by_idx = {}
     for key_matches in matches.values():
@@ -283,7 +273,7 @@ def _model_slug(model_name):
     return re.sub(r'[^a-z0-9]+', '_', model_name.lower()).strip('_')
 
 
-def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type, synonyms):
+def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type):
     slug = _model_slug(model_name)
     out_path = out_dir / f"{stem}_extraction_{slug}.json"
     if out_path.exists():
@@ -292,8 +282,7 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
 
     client = _get_client()
     extraction = extract_values(client, unique, vocab, user_keys, schema,
-                                doc_type, f"{stem}.pdf",
-                                model=model_name, synonyms=synonyms)
+                                doc_type, f"{stem}.pdf", model=model_name)
 
     pre = sum(len(v) for v in extraction.values())
     extraction = _dedup_extraction(extraction)
@@ -315,32 +304,25 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
     return extraction
 
 
-def extract_parallel(matches_path, sections_path, vocab_path, user_keys,
-                     markdown_path=None, tables_path=None):
-    stem = Path(matches_path).stem.replace("_matches", "")
+def extract_parallel(stem, user_keys):
     out_dir = Path(config.OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     models = config.EXTRACTION_MODELS
 
-    md_text, vocab, unique = _prepare_sections(
-        matches_path, sections_path, vocab_path, markdown_path, tables_path)
+    md_text, vocab, unique = _prepare_sections(stem)
 
-    # acronym/spelled-out synonyms, reuse what embed cached, else derive from text
-    syn_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_key_synonyms.json"
-    if syn_path.exists():
-        synonyms = json.loads(syn_path.read_text(encoding="utf-8"))
-    else:
-        synonyms = synonyms_for_keys(user_keys, md_text)
-
-    # schema discovery once for all models
-    doc_type, schema = discover_schema(md_text, unique, vocab, user_keys, synonyms=synonyms)
+    # schema discovery once for all models — cached to intermediate/<stem>_schema.json
+    disc = cached(inter(stem, "schema.json"),
+                  lambda: dict(zip(("document_type", "schema"),
+                                   discover_schema(md_text, unique, vocab, user_keys))))
+    doc_type, schema = disc["document_type"], disc["schema"]
     logger.info(f"Schema: document_type='{doc_type}'")
 
     results = []
     with ThreadPoolExecutor(max_workers=config.EXTRACTION_WORKERS) as pool:
         futures = {
-            pool.submit(_run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type, synonyms): m
+            pool.submit(_run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type): m
             for m in models
         }
         for fut in as_completed(futures):
@@ -360,17 +342,7 @@ if __name__ == "__main__":
     parser.add_argument("--keys", nargs="+", required=True)
     args = parser.parse_args()
 
-    int_dir = Path(config.INTERMEDIATE_DIR)
-    md_dir = Path(config.MARKDOWN_DIR)
-
-    results = extract_parallel(
-        matches_path=str(int_dir / f"{args.stem}_matches.json"),
-        sections_path=str(int_dir / f"{args.stem}_sections.json"),
-        vocab_path=str(int_dir / f"{args.stem}_vocab.json"),
-        user_keys=args.keys,
-        markdown_path=str(md_dir / f"{args.stem}.md"),
-        tables_path=str(int_dir / f"{args.stem}_tables.json"),
-    )
+    results = extract_parallel(args.stem, args.keys)
     for result in results:
         total = sum(len(records) for records in result.values())
         model = next((rec.get("metadata", {}).get("model")
