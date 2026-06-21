@@ -1,0 +1,16 @@
+inter-rater agreement across 288 facts (all files):
+  gemma4:31b-cloud <-> deepseek-v4-flash:cloud: kappa=0.292, agreement=94.1%
+  gemma4:31b-cloud <-> glm-4.7:cloud: kappa=0.51, agreement=96.9%
+  deepseek-v4-flash:cloud <-> glm-4.7:cloud: kappa=0.357, agreement=94.4%
+
+
+
+
+scored 32/32 docs (tp/fp/fn and metrics summed across all scored files)
+
+variant                        tp   fp   fn   recall  precision     f1
+------------------------------------------------------------------------
+gemma4:31b-cloud              257   27   14    0.948      0.905  0.926
+deepseek-v4-flash:cloud       246   31   25    0.908      0.888  0.898
+glm-4.7:cloud                 251   29   20    0.926      0.896  0.911
+user_report                   252   22   19    0.930      0.920  0.925
