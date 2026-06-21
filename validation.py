@@ -16,8 +16,8 @@ from structured_data_extraction.main import process_single_pdf
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("validation")
 
-GT_PATH = Path(__file__).resolve().parent / "validation.json"
-VALIDATION_DIR = Path(__file__).resolve().parent / "validation-set"
+GT_PATH = Path(__file__).resolve().parent / "validation" / "validation.json"
+VALIDATION_DIR = Path(__file__).resolve().parent / "validation" / "validation-set"
 
 KEYS = {
     "0150200051": ["product family","cable length", "product specification", "Voltage", "net weight"],
