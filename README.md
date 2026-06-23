@@ -20,14 +20,15 @@ matched, and finally asks an LLM to read just those passages and return structur
 
 ```
 PDF
- └─► convert    (docling)            → markdown + items.json
-      └─► vocab  (YAKE)              → vocab.json
-           └─► classify_sections (RandomForest)  → sections.json
-                └─► tables (complexity scoring)   → tables.json
-                     └─► embed (sentence-transformers) → *_embeddings.npy + row_map
-                          └─► search (cosine similarity)    → matches.json
-                               └─► tables.refine (vision LLM, lazy) → cleaned HTML tables
-                                    └─► extract (schema discovery + LLM) → output/<stem>_extraction.json
+ └─► convert  (docling)                → markdown + items.json
+      └─► vocab  (YAKE)                → vocab.json
+           └─► classify (RandomForest) → sections.json
+                └─► tables (complexity scoring)            → tables.json
+                     └─► refine symbol-only tables (vision LLM)   → de-garbled rows
+                          └─► embed (sentence-transformers)       → *_embeddings.npy + row_map
+                               └─► search (cosine similarity)     → matches.json
+                                    └─► refine matched tables (vision LLM, lazy) → cleaned HTML
+                                         └─► extract (schema discovery + LLM) → output/<stem>_extraction_<model>.json
 ```
 
 Each step writes its output to disk and is **skipped on a re-run if the file already
@@ -94,17 +95,22 @@ need scanned documents.
 4-grams). This is the "learn the domain from the document" step. Lower YAKE score = more
 important.
 
-**`classify_sections.py`** : loads the pre-trained RandomForest classifier and tags every
-text item as `header`, `list`, `table`, `text`, or `title`. The result, `sections.json`,
-is the canonical content stream every downstream step reads. *Choice:* a small supervised
+**`classify.py`** : loads the pre-trained RandomForest classifier (plus its two TF-IDF
+vectorizers and the Docling category list from `models/`) and tags every text item as
+`header`, `list`, `table`, `text`, or `title`. The result, `sections.json`, is the
+canonical content stream every downstream step reads. *Choice:* a small supervised
 classifier (rather than trusting Docling's labels directly) because Docling mislabels
 multi-sentence captions, sub-headers, etc.
 
-**`tables.py`** : two jobs:
+**`tables.py`** : three jobs:
 1. `process_tables` scores each table's *complexity* (HTML/merge markers, ragged column
    counts, multi-line or very long cells, scientific notation). Anything over
-   `TABLE_COMPLEXITY_THRESHOLD` is routed `complex`; the rest are `simple` and left alone.
-2. `refine_matched_tables` (called from `main.py` **after** search) takes the complex
+   `VISION_COMPLEXITY_THRESHOLD` is routed `complex`; the rest are `simple` and left alone.
+2. `refine_symbol_only_tables` (called from `main.py` **before** embedding) rebuilds the
+   complex tables Docling stripped down to bare symbols. Those rows carry no words, so search
+   could never retrieve them — meaning they'd never reach the lazy-vision step below.
+   De-garbling them up front gets their recovered text into the embeddings.
+3. `refine_matched_tables` (called from `main.py` **after** search) takes the complex
    tables that matched a key, re-renders their bounding box straight out of the PDF with
    PyMuPDF, and asks the vision LLM to rebuild them as clean HTML — falling back to a
    text-only LLM if vision fails. Docling mangles merged/nested tables; this recovers
@@ -112,22 +118,24 @@ multi-sentence captions, sub-headers, etc.
 
 **`embed.py`** : turns text into vectors with a SentenceTransformer
 (`nomic-embed-text-v1.5` by default). It embeds two things in one batch: whole sections,
-and individual table rows. The row parser  detects group-header rows and Min/Typ/Max sub-headers and prepends the group label so each row embeds with proper context. User keys are expanded against the YAKE vocab and any discovered acronym
-synonyms before being embedded. Sections are stacked *before* rows in the output matrix;
-`search.py` relies on that ordering.
+and individual table rows. The row parser detects group-header rows and Min/Typ/Max
+sub-headers and prepends the group label so each row embeds with proper context. User keys
+are expanded against the YAKE vocab before being embedded. nomic needs task prefixes, so
+documents are encoded as `search_document:` and keys as `search_query:` — without them all
+the similarities collapse toward each other and the threshold stops discriminating. Sections
+are stacked *before* rows in the output matrix; `search.py` relies on that ordering.
 
 
 **`search.py`** : cosine similarity between each key vector and the combined
 section+row matrix. Anything above `SIMILARITY_THRESHOLD` (capped at `SEARCH_TOP_K`
-hits) becomes a match. Row matches are flagged and carry their row number + group header
-so the extractor can later filter the original table down to the right rows. Output:
+hits) becomes a match. Row matches are flagged and carry their row number + group header,
+so the extractor knows which table (and which group within it) the hit came from. Output:
 `matches.json`, keyed by your original (un-expanded) key.
 
 **`extract.py`** : the LLM stage, and the densest file:
 - merges the cleaned-up table HTML back into the section list and attaches each table's
   nearest heading for context;
-- renders the matched sections into the prompt, shrinking long tables down to just the
-  matched parameter group via `table_filter`;
+- renders the matched sections into the prompt (truncating long prose, leaving tables whole);
 - `discover_schema` asks an LLM what fields each key should have (qualifier, condition,
   value, unit…) and what kind of document this is;
 - builds a Pydantic model from that schema on the fly and runs the extractor LLM through
@@ -143,27 +151,23 @@ so the extractor can later filter the original table down to the right rows. Out
 features one-hot the item's own Docling label plus its neighbours' labels and the distance
 to the nearest section header.
 
-**`classify.py`** : a thin wrapper that loads the trained RandomForest, the two TF-IDF
-vectorizers, and the Docling category list from `models/`, and runs inference.
+**`paths.py`** : tiny helpers for the `intermediate/` and `output/` filename conventions
+(`<stem>_<name>`) plus JSON read/write, so every step names its cache files the same way.
 
-**`table_filter.py`** : once we know which rows matched, this trims a table down to just
-the relevant parameter group(s) before sending it to the extractor (a big win on long
-datasheet tables). Two implementations — one for markdown tables, one for HTML — the HTML
-one understands `rowspan` so merged first-column cells stay attached to their group.
+**`matching.py`** : the equivalence logic — when do two extracted records describe the
+**same fact**? Numbers and units must match exactly (after Unicode/dash normalisation); the
+descriptor text (qualifier, condition…) only has to clear a rapidfuzz similarity of
+`FUZZ_THRESHOLD` (85), because models phrase conditions differently (`TA = −40°C` vs
+`T_A = -40°C`). Empty fields act as wildcards, so a sparse record still matches a fuller one.
 
-**`abbreviations.py`** : scans the document for explicit acronym definitions
-("Common Mode Rejection Ratio (CMRR)") and builds a synonym map, so a key typed either way
-matches. Again: derived from the document, not hardcoded.
-
-**`rater.py`** : a post-extraction analysis, *not* part of the pipeline yet. It
-reads every `output/*.json`, groups the records by `(file, key)` across the models that
-produced them, and scores agreement. Two records from different models count as the **same
-fact** when their value *and* unit match exactly and their descriptor text (qualifier,
-condition…) is at least `THRESHOLD` (0.85) similar by Levenshtein ratio —> fuzzy on the
-wording because models phrase conditions differently (`TA = −40°C` vs `T_A = -40°C`), exact
-on the number. Each fact gets a **confidence** = how many models found it ÷ number of models
-(3/3 → 1.0, 2/3 → 0.67…), and it prints pairwise **Cohen's kappa** as a global inter-rater
-agreement metric.
+**`rater.py`** : a post-extraction analysis, *not* part of the pipeline. It reads every
+`output/*_extraction_*.json`, clusters the records into facts across the models that
+produced them (via `matching.same_fact`), and scores agreement. Each fact gets a
+**confidence** = how many models found it ÷ number of models (3/3 → 1.0, 2/3 → 0.67…). It
+writes three files to `output/` — `rating_report.json` (every fact with its confidence and
+disagreements), `fused.json` (the merged view), and `user_report.json` (only the facts a
+majority of models agreed on) — and prints pairwise **Cohen's kappa** as a global
+inter-rater agreement metric.
 
 ### Templates
 
@@ -196,8 +200,8 @@ already have via environment variables. Defaults (from `config.py`):
 | Role               | Default model                   | Env var               |
 |--------------------|---------------------------------|-----------------------|
 | Schema discovery   | `glm-5.1:cloud`                 | `OLLAMA_SCHEMA_MODEL` |
-| Extraction (×3, in parallel) | `gemma4:31b-cloud`, `deepseek-v4-flash:cloud`, `gpt-oss:120b-cloud` | (edit `EXTRACTION_MODELS`) |
-| Vision (table cleanup) | `qwen3-vl:235b-instruct-cloud` | `OLLAMA_VISION_MODEL` |
+| Extraction (×3, in parallel) | `gemma4:31b-cloud`, `deepseek-v4-flash:cloud`, `glm-4.7:cloud` | (edit `EXTRACTION_MODELS`) |
+| Vision (table cleanup) | `kimi-k2.7-code:cloud` | `OLLAMA_VISION_MODEL` |
 | Embeddings         | `nomic-ai/nomic-embed-text-v1.5` | `EMBEDDING_MODEL`   |
 
 ```bash
@@ -252,9 +256,10 @@ agreed on each value:
 python -m structured_data_extraction.rater
 ```
 
-It reads everything in `output/`, prints per-key confidence (how many facts all the models
-found vs. only some), lists the disagreements, and reports pairwise Cohen's kappa. No
-arguments — it just analyses whatever outputs are present.
+It reads everything in `output/`, clusters the records into facts, and writes
+`rating_report.json`, `fused.json`, and `user_report.json` alongside them. It also prints
+per-fact confidence (how many facts all the models found vs. only some) and pairwise
+Cohen's kappa to the console. No arguments — it just analyses whatever outputs are present.
 
 
 ## License
