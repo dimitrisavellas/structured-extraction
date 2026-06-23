@@ -6,7 +6,7 @@ inter-rater agreement across 288 facts (all files):
 
 
 
-scored 32/32 docs (tp/fp/fn and metrics summed across all scored files)
+32 docs 
 
 variant                        tp   fp   fn   recall  precision     f1
 ------------------------------------------------------------------------

@@ -9,8 +9,8 @@ _META = {"confidence", "models", "model"}
 @dataclass
 class Record:
     source: str        # document stem
-    field: str         # extracted key 
-    fields: dict       # schema-driven value, unit, qualifier, ...
+    key: str           # extracted key 
+    attributes: dict   # schema-driven value, unit, qualifier, ...
     confidence: float  # fusion confidence
     models: list       # provenance
 
@@ -18,11 +18,12 @@ class Record:
 def load_records(path=DEFAULT_PATH):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return [
-        Record(source, field, {k: v for k, v in r.items() if k not in _META},
+        Record(source, key, {k: v for k, v in r.items() if k not in _META},
                r.get("confidence", 1.0), r.get("models", []))
-        for source, by_field in data.items()
-        for field, recs in by_field.items()
+        for source, by_key in data.items()
+        for key, recs in by_key.items()
         for r in recs
     ]
 
 records = load_records()
+print(records[15])
