@@ -23,4 +23,3 @@ markdown/
 .pytest_cache/
 
 extras
-validation-set
