@@ -35,10 +35,46 @@ def fuse(records_by_model):
     return clusters
 
 
+_SEC_PRI = {"table": 0, "text": 1, "list": 2}
+
+
+def _best_section(records: list[dict]) -> str:
+    """
+    Return the highest-priority section_type found across the records.
+    Priority is table > text > list; an unknown/missing type loses to all of them.
+
+    Arguments
+    records: A list of records, each a dict that may hold a "metadata" dict
+        with a "section_type" key.
+
+    Returns
+    The winning section_type as a string ("table", "text", "list", or "unknown").
+    """
+    types = [r.get("metadata", {}).get("section_type", "unknown") for r in records]
+    return min(types, key=lambda t: _SEC_PRI.get(t, 99))
+
+
+def _fused_metadata(records: list[dict]) -> dict:
+    """
+    Build the metadata for a fused record.
+
+    Arguments
+    records: The records in one cluster, each a dict that may hold a "metadata" dict.
+
+    Returns
+    A metadata dict with "section_type" and "specified" (defaulting to True).
+    """
+    rep = max(records, key=_filled_fields)
+    return {"section_type": _best_section(records),
+            "specified": rep.get("metadata", {}).get("specified", True)}
+
+
 def consensus(cluster, n_models):
-    rep = max(cluster.values(), key=_filled_fields)
+    recs = list(cluster.values())
+    rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
-    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster), **fields}
+    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster),
+            **fields, "metadata": _fused_metadata(recs)}
 
 
 def _fields_match(f, va, vb):
@@ -65,6 +101,8 @@ def _merge_into(existing, incoming, n_models):
     models = sorted(set(existing["models"]) | set(incoming["models"]))
     rep = max((existing, incoming), key=_filled_fields)
     return {**{k: v for k, v in rep.items() if k not in _META_FIELDS},
+            "metadata": {**rep.get("metadata", {}),
+                         "section_type": _best_section([existing, incoming])},
             "confidence": round(len(models) / n_models, 2),
             "models": models}
 
@@ -120,7 +158,8 @@ def majority_cutoff(n):
     return n // 2 + 1
 
 
-def rate(by_file, models):
+def rate(by_file, models=None):
+    models = config.EXTRACTION_MODELS if models is None else models
     n = len(models)
     Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     all_facts = fuse_outputs(by_file, models)
@@ -180,7 +219,7 @@ def main():
     if not by_file:
         print(f"No extraction outputs found in {config.OUTPUT_DIR}")
         return
-    rate(by_file, config.EXTRACTION_MODELS)
+    rate(by_file)
 
 
 if __name__ == "__main__":

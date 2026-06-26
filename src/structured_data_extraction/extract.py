@@ -1,8 +1,10 @@
 import argparse
 import json
 import logging
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
 import instructor
@@ -17,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 jinja_env = Environment(loader=FileSystemLoader(config.TEMPLATES_DIR))
-MAX_SECTION_CHARS = 5000 
+MAX_SECTION_CHARS = 5000
 
 
 class ExtractionMetadata(BaseModel):
@@ -37,7 +39,7 @@ SECTION_TYPE_PRIORITY = {"table": 0, "text": 1, "list": 2}
 
 
 def _raw_client():
-    return OpenAI(base_url=config.OLLAMA_BASE_URL, api_key=config.OLLAMA_API_KEY)
+    return OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
 
 
 def _get_client():
@@ -138,10 +140,9 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
     logger.info("Calling LLM for schema discovery...")
     client = _raw_client()
     resp = client.chat.completions.create(
-        model=config.OLLAMA_SCHEMA_MODEL,
+        model=os.environ["SCHEMA_MODEL"],
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
-        seed=config.SEED,
     )
     raw = strip_code_fence(resp.choices[0].message.content.strip())
 
@@ -159,7 +160,7 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
 
 def extract_values(client, matched_sections, vocab, user_keys, schema,
                    document_type="unknown", source_file="", model=None):
-    model = model or config.OLLAMA_EXTRACT_MODEL
+    model = model or config.EXTRACTION_MODELS[0]
     template = jinja_env.get_template("extraction.j2")
 
     section_content = _format_sections(matched_sections)
@@ -178,14 +179,14 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
 
     logger.info(f"Calling LLM for extraction (model={model})...")
     last_err = None
+    max_retries = int(os.environ["MAX_LLM_RETRIES"])
 
-    for attempt in range(config.MAX_LLM_RETRIES + 1):
+    for attempt in range(max_retries + 1):
         try:
             result = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                seed=config.SEED,
                 response_model=extraction_model,
             )
             output = {}
@@ -197,7 +198,7 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
             last_err = e
             logger.warning(f"[{model}] Attempt {attempt + 1} failed: {e}")
 
-    logger.error(f"[{model}] Extraction failed after {config.MAX_LLM_RETRIES + 1} attempts: {last_err}")
+    logger.error(f"[{model}] Extraction failed after {max_retries + 1} attempts: {last_err}")
     return {}
 
 
@@ -308,6 +309,12 @@ def extract_parallel(stem, user_keys):
     out_dir = Path(config.OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # run provenance for the FDO envelope: when extraction first ran + the user's keys.
+    # cached so a re-run (which skips the cached per-model files) keeps the original stamp.
+    cached(inter(stem, "run.json"),
+           lambda: {"extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "user_keys": list(user_keys)})
+
     models = config.EXTRACTION_MODELS
 
     md_text, vocab, unique = _prepare_sections(stem)
@@ -320,7 +327,8 @@ def extract_parallel(stem, user_keys):
     logger.info(f"Schema: document_type='{doc_type}'")
 
     results = []
-    with ThreadPoolExecutor(max_workers=config.EXTRACTION_WORKERS) as pool:
+    workers = max(1, min(int(os.environ["EXTRACTION_WORKERS"]), len(models)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(_run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type): m
             for m in models

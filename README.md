@@ -24,7 +24,6 @@ PDF
       └─► vocab  (YAKE)                → vocab.json
            └─► classify (RandomForest) → sections.json
                 └─► tables (complexity scoring)            → tables.json
-                     └─► refine symbol-only tables (vision LLM)   → de-garbled rows
                           └─► embed (sentence-transformers)       → *_embeddings.npy + row_map
                                └─► search (cosine similarity)     → matches.json
                                     └─► refine matched tables (vision LLM, lazy) → cleaned HTML
@@ -61,8 +60,9 @@ general.
   model from it on the fly, and hands it to [Instructor](https://python.useinstructor.com/)
   so the model is forced to return validated structured output instead of free prose.
 - **Several models vote.** Extraction runs across a few LLMs in parallel and the results
-  are de-duplicated, preferring table-sourced records over free-text ones. After the fact,
-  `rater.py` scores how much the models agreed and attaches a confidence to every record.
+  are de-duplicated, preferring table-sourced records over free-text ones. The pipeline then
+  runs `rater.py` to score how much the models agreed and attach a confidence to every record
+  (a single model still works — every fact just gets confidence 1.0).
 
 ---
 
@@ -74,11 +74,13 @@ for one PDF, then re-invokes the table refiner *only* for tables that search act
 matched (this is the "lazy vision" trick). `process_batch` loops the whole thing over a
 directory of PDFs. This is the file you run.
 
-**`config.py`** : every path, model name, and threshold in one place. Paths are derived
-relative to the repo root, so the project is portable. Model names, the embedding model,
-the Ollama URL, and a couple of parallelism knobs are overridable via environment
-variables; the numeric thresholds are plain constants you can edit. It also auto-selects the embedding device
-(CUDA → Apple MPS → CPU).
+**`config.py` + `.env`** : the tunable values (provider URL/key, model names, thresholds,
+parallelism knobs) live in a `.env` file at the repo root; `config.py` loads it and exposes
+the values to the rest of the code. Paths are derived relative to the repo root, so the
+project is portable, and the embedding device is auto-selected (CUDA → Apple MPS → CPU).
+The provider is any OpenAI-compatible endpoint — set `LLM_BASE_URL` / `LLM_API_KEY` to point
+at Ollama, OpenAI, vLLM, etc. The `.env` file is gitignored (it can hold an API key);
+edit it in place. Shell environment variables, if set, override the file.
 
 ### Pipeline steps
 
@@ -160,14 +162,20 @@ descriptor text (qualifier, condition…) only has to clear a rapidfuzz similari
 `FUZZ_THRESHOLD` (85), because models phrase conditions differently (`TA = −40°C` vs
 `T_A = -40°C`). Empty fields act as wildcards, so a sparse record still matches a fuller one.
 
-**`rater.py`** : a post-extraction analysis, *not* part of the pipeline. It reads every
-`output/*_extraction_*.json`, clusters the records into facts across the models that
-produced them (via `matching.same_fact`), and scores agreement. Each fact gets a
+**`rater.py`** : runs automatically at the end of the pipeline (and can be re-run on its
+own). It reads every `output/*_extraction_*.json`, clusters the records into facts across the
+models that produced them (via `matching.same_fact`), and scores agreement. Each fact gets a
 **confidence** = how many models found it ÷ number of models (3/3 → 1.0, 2/3 → 0.67…). It
 writes three files to `output/` — `rating_report.json` (every fact with its confidence and
 disagreements), `fused.json` (the merged view), and `user_report.json` (only the facts a
 majority of models agreed on) — and prints pairwise **Cohen's kappa** as a global
-inter-rater agreement metric.
+inter-rater agreement metric. With a single extraction model every fact passes through at
+confidence 1.0 and the kappa step is skipped.
+
+**`fdo_records.py`** (in the package) : the final pipeline step. It wraps `user_report.json` into one
+FAIR-Digital-Object-style envelope per document (`output/fdo_records.json`), adding
+provenance — source file, document type, and the schema/extraction/vision/embedding models
+used.
 
 ### Templates
 
@@ -192,27 +200,34 @@ pip install -e .                    # or: pip install -r requirements.txt
 ```
 
 
-### Set up the models (Ollama)
+### Set up the provider and models
 
-The pipeline calls several models by name. Pull them, or point the pipeline at models you
-already have via environment variables. Defaults (from `config.py`):
+The pipeline talks to any **OpenAI-compatible** endpoint. Point it at your provider and pick
+your models by editing `.env` at the repo root (values shown are the defaults):
 
-| Role               | Default model                   | Env var               |
-|--------------------|---------------------------------|-----------------------|
-| Schema discovery   | `glm-5.1:cloud`                 | `OLLAMA_SCHEMA_MODEL` |
-| Extraction (×3, in parallel) | `gemma4:31b-cloud`, `deepseek-v4-flash:cloud`, `glm-4.7:cloud` | (edit `EXTRACTION_MODELS`) |
-| Vision (table cleanup) | `kimi-k2.7-code:cloud` | `OLLAMA_VISION_MODEL` |
-| Embeddings         | `nomic-ai/nomic-embed-text-v1.5` | `EMBEDDING_MODEL`   |
+| Role               | `.env` key            | Default                          |
+|--------------------|-----------------------|----------------------------------|
+| Provider endpoint  | `LLM_BASE_URL`        | `http://localhost:11434/v1`      |
+| Provider API key   | `LLM_API_KEY`         | `ollama`                         |
+| Schema discovery   | `SCHEMA_MODEL`        | `glm-5.1:cloud`                  |
+| Extraction (1+, in parallel) | `EXTRACTION_MODELS` | `gemma4:31b-cloud,deepseek-v4-flash:cloud,glm-4.7:cloud` |
+| Vision (table cleanup) | `VISION_MODEL`    | `kimi-k2.7-code:cloud`           |
+| Embeddings         | `EMBEDDING_MODEL`     | `nomic-ai/nomic-embed-text-v1.5` |
+
+`EXTRACTION_MODELS` is a comma-separated list — list several models to extract in parallel
+and cross-check their agreement, or just **one** model if you prefer (the pipeline adapts and
+skips the agreement step). The first model in the list is also the "primary" one used wherever
+a single model is needed, such as text-based table cleanup. To use a non-Ollama provider, e.g. OpenAI:
 
 ```bash
-ollama list                         # see what you have
-# point at your own models instead of the defaults, e.g.:
-export OLLAMA_EXTRACT_MODEL=llama3.1:8b
-export OLLAMA_BASE_URL=http://localhost:11434/v1
+# in .env
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+EXTRACTION_MODELS=gpt-4o-mini
 ```
 
 If a named model isn't available, the extract step will retry and then fail for that
-model — check `ollama list` first.
+model — check that the model exists on your provider first.
 
 ---
 
@@ -232,6 +247,10 @@ python -m structured_data_extraction.main pdf/1167fc.pdf --keys gain CMRR
 - Wrap multi-word keys in quotes.
 - If you omit `--keys`, it prompts for a comma-separated list interactively.
 
+A full run writes the per-model extractions to `output/<stem>_extraction_<model>.json`, then
+automatically fuses them into `user_report.json`, `fused.json`, `rating_report.json`, and the
+provenance-stamped `fdo_records.json` — no extra commands needed.
+
 
 
 ### Testing just the extraction stage (fast loop)
@@ -247,19 +266,19 @@ python -m structured_data_extraction.extract --stem 1167fc --keys gain CMRR
 Every step is runnable standalone this way (`-m ...search`, `-m ...embed`, etc.).
 
 
-### Scoring model agreement (confidence)
+### Re-scoring model agreement on its own
 
-Once extraction has written the per-model outputs to `output/`, score how much the models
-agreed on each value:
+The pipeline already runs this at the end, but you can re-score whatever outputs are present
+in `output/` without re-extracting:
 
 ```bash
-python -m structured_data_extraction.rater
+python -m structured_data_extraction.rater     # rebuild rating_report / fused / user_report
+python -m structured_data_extraction.fdo_records   # rebuild fdo_records.json from user_report
 ```
 
-It reads everything in `output/`, clusters the records into facts, and writes
-`rating_report.json`, `fused.json`, and `user_report.json` alongside them. It also prints
-per-fact confidence (how many facts all the models found vs. only some) and pairwise
-Cohen's kappa to the console. No arguments — it just analyses whatever outputs are present.
+`rater` clusters the records into facts, writes `rating_report.json`, `fused.json`, and
+`user_report.json`, and prints per-fact confidence and pairwise Cohen's kappa. Both take no
+arguments — they just analyse whatever outputs are present.
 
 
 ## License

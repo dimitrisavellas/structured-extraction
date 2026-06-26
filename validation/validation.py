@@ -1,10 +1,3 @@
-"""Validation harness: run the pipeline over the validation set, fuse, and score.
-
-  python validation.py                     # run all GT docs, fuse, score
-  python validation.py --stems AD840 BC546 # run just these, fuse, score
-  python validation.py --no-run            # score existing output/ only
-"""
-
 import argparse
 import json
 import logging
@@ -16,8 +9,8 @@ from structured_data_extraction.main import process_single_pdf
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("validation")
 
-GT_PATH = Path(__file__).resolve().parent / "validation" / "validation.json"
-VALIDATION_DIR = Path(__file__).resolve().parent / "validation" / "validation-set"
+GT_PATH = Path(__file__).resolve().parent / "validation.json"
+VALIDATION_DIR = Path(__file__).resolve().parent / "validation-set"
 
 KEYS = {
     "0150200051": ["product family","cable length", "product specification", "Voltage", "net weight"],
@@ -125,8 +118,7 @@ def prf(tp, fp, fn):
             "f1": round(f1, 3)}
 
 
-# the deliverable is user_report.json — score that exact file so the reported quality describes
-# what the user actually receives, not an in-memory re-fusion. per-model rows stay as diagnostics.
+
 USER_REPORT = "user_report"
 
 
@@ -134,7 +126,7 @@ def evaluate(by_file, user_report, gt, models, only=None):
     variants = list(models) + [USER_REPORT]
     totals = {v: [0, 0, 0] for v in variants}
 
-    # only score docs we actually extracted, so a partial/smoke run is meaningful
+    # only score docs  actually extracted
     stems = sorted(set(gt) & set(by_file))
     if only:
         stems = [s for s in stems if s in set(only)]
@@ -185,7 +177,7 @@ def main():
         print(f"No extraction outputs in {config.OUTPUT_DIR} — run without --no-run first.")
         return
 
-    rater.rate(by_file, config.EXTRACTION_MODELS)  # writes user_report.json
+    rater.rate(by_file) # writes the user report
 
     gt = json.loads(GT_PATH.read_text(encoding="utf-8"))
     user_report = json.loads((Path(config.OUTPUT_DIR) / "user_report.json").read_text(encoding="utf-8"))

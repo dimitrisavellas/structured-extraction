@@ -2,6 +2,7 @@ import base64
 import concurrent.futures
 import json
 import logging
+import os
 import re
 from collections import Counter
 from html.parser import HTMLParser
@@ -136,7 +137,7 @@ _ollama_client = None
 def _client():
     global _ollama_client
     if _ollama_client is None:
-        _ollama_client = OpenAI(base_url=config.OLLAMA_BASE_URL, api_key=config.OLLAMA_API_KEY)
+        _ollama_client = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
     return _ollama_client
 
 
@@ -145,7 +146,6 @@ def _call_model(model, messages):
         model=model,
         messages=messages,
         temperature=0.0,
-        seed=config.SEED,
     )
     return strip_code_fence(resp.choices[0].message.content.strip())
 
@@ -158,12 +158,13 @@ def _call_vision_model(b64_img, table_md):
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}},
         ],
     }]
-    return _call_model(config.OLLAMA_VISION_MODEL, messages)
+    return _call_model(os.environ["VISION_MODEL"], messages)
 
 
 def _call_text_model(table_md):
     messages = [{"role": "user", "content": TABLE_TEXT_PROMPT + table_md}]
-    return _call_model(config.OLLAMA_EXTRACT_MODEL, messages)
+    # single-model task → use the primary (first) extraction model
+    return _call_model(config.EXTRACTION_MODELS[0], messages)
 
 
 class _TableParser(HTMLParser):
@@ -314,9 +315,10 @@ def _word_cell_ratio(content):
 
 
 def refine_symbol_only_tables(tables_path):
+    threshold = config.VISION_COMPLEXITY_THRESHOLD
     tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
     idxs = {t["section_idx"] for t in tables
-            if t.get("complexity_score", 0) >= config.VISION_COMPLEXITY_THRESHOLD
+            if t.get("complexity_score", 0) >= threshold
             and "|" in t.get("content", "") and _word_cell_ratio(t["content"]) < 0.10}
     if idxs:
         logger.info(f"Pre-refining {len(idxs)} symbol-only table(s) before embedding: {sorted(idxs)}")
@@ -330,15 +332,16 @@ def refine_matched_tables(tables_path, matched_section_indices, finalize=True):
 
     tables = json.loads(tables_path.read_text(encoding="utf-8"))
 
+    threshold = config.VISION_COMPLEXITY_THRESHOLD
     matched = [t for t in tables if t.get("section_idx") in matched_section_indices]
     to_refine = [t for t in matched
-                 if t.get("complexity_score", 0) >= config.VISION_COMPLEXITY_THRESHOLD
+                 if t.get("complexity_score", 0) >= threshold
                  and not t.get("refined")]
 
     skipped = len(matched) - len(to_refine)
     if skipped:
         logger.info(f"  Refining {len(to_refine)} matched tables above complexity "
-                    f"{config.VISION_COMPLEXITY_THRESHOLD}; {skipped} simpler ones left as markdown")
+                    f"{threshold}; {skipped} simpler ones left as markdown")
 
     if not to_refine:
         if finalize:

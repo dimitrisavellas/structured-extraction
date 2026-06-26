@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import re
 from pathlib import Path
 import numpy as np
@@ -13,12 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def _load_model(model_name=None):
-    name = model_name or config.EMBEDDING_MODEL
+    """Load the embedding model, either from the provided name or from the environment variable."""
+    name = model_name or os.environ["EMBEDDING_MODEL"]
     logger.info(f"Loading embedding model: {name} on {config.EMBEDDING_DEVICE}")
     return SentenceTransformer(name, device=config.EMBEDDING_DEVICE, trust_remote_code=True)
 
 
 def _expand_key(key, vocab):
+    """Return a tuple of (expanded_key, original_key). If EXPAND_KEYS is False, returns (key, key)."""
     if not config.EXPAND_KEYS:
         return key, key
 
@@ -37,23 +40,25 @@ def _expand_key(key, vocab):
 
 
 def _is_group_header(cells):
-    """Return True if this row looks like a group-header label rather than a data row."""
+    """Determine if a row is likely a group header based on its content."""
     if len(cells) <= 1 or not cells[0]:
         return False
     empty_count = sum(1 for cell in cells[1:] if not cell)
     standalone_nums = sum(
         1 for cell in cells[1:]
-        if cell and re.match(r'^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$', cell.strip())
+        if cell and re.match(r'^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$', cell.strip()) # matches standalone numbers with optional units
     )
     has_equals = '=' in cells[0]
-    return empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals
+    return empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals # if most cells are empty, few standalone numbers,
+                                                                                        # and no equals sign in the first cell, it's likely a group header
 
 
 def _parse_html_rows(content):
+    """Parse table rows from HTML content, return a list of row dictionaries."""
     rows = []
-    for n, tr in enumerate(re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)):
+    for n, tr in enumerate(re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)): # find all <tr>...</tr> blocks
         cells = [re.sub(r"<[^>]+>", "", c).strip()
-                 for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)]
+                 for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)] # find all <td> or <th> blocks within the <tr>
         dedup = []
         for c in cells:                       # collapse repeats from rowspan/colspan expansion
             if not dedup or dedup[-1] != c:
@@ -65,6 +70,7 @@ def _parse_html_rows(content):
 
 
 def _parse_table_rows(content):
+    """Parse table rows from markdown content, return a list of row dictionaries."""
     if "<tr" in content.lower():              # pre-embed refined tables are HTML, not markdown pipes
         return _parse_html_rows(content)
     lines = content.strip().split('\n')

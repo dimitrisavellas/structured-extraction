@@ -10,7 +10,9 @@ from .features import build_features, context_rows
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-
+# Section classifier is a random forest model trained on labeled sections from the Docling dataset.
+# It uses TF-IDF features of the text and character n-grams, as well as the Docling label of each section, 
+# to predict the section type (table, text, list, etc)
 class SectionClassifier:
 
     def __init__(self, model_dir=None):
@@ -22,6 +24,13 @@ class SectionClassifier:
         self.dl_idx = {c: i for i, c in enumerate(self.dl_cats)}
 
     def classify(self, chunks):
+        """
+        Predict a section type (table, text, list, ...) for each chunk.
+
+        Each chunk is a dict with "section_id", "docling_label", and "text";
+        "page" and "bbox" are passed through if present.
+        Returns the chunks sorted by section_id, each with "section_type" added.
+        """
         if not chunks:
             return []
         ordered, rows = context_rows(chunks, text_key="text")
@@ -31,6 +40,14 @@ class SectionClassifier:
 
 
 def classify_sections(pdf_stem):
+    """
+    Disk wrapper around SectionClassifier.classify for the batch pipeline.
+    Reads {stem}_items.json, runs the items with text through classify(),
+    and writes {stem}_sections.json (skips if it already exists).
+
+    Returns the list of classified sections — each a dict with
+    "type", "content", "docling_label", "page", "bbox", and "section_idx".
+    """
     items_path = Path(config.INTERMEDIATE_DIR) / f"{pdf_stem}_items.json"
     out_path = Path(config.INTERMEDIATE_DIR) / f"{pdf_stem}_sections.json"
 
@@ -46,8 +63,7 @@ def classify_sections(pdf_stem):
 
     model_dir = Path(config.SECTION_CLASSIFIER_DIR)
     if not model_dir.exists():
-        raise FileNotFoundError(f"Classifier not found at {model_dir}. "
-                                "Expected the trained section_classifier model to ship with the project.")
+        raise FileNotFoundError(f"Classifier not found at {model_dir}.")
 
     # only classify items that have text
     text_chunks = [

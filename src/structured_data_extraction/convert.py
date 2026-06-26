@@ -12,25 +12,28 @@ from . import config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+#Custom Docling pipeline configuration for PDF conversion 
 pipeline_opts = PdfPipelineOptions()
 pipeline_opts.do_ocr = False
 pipeline_opts.do_table_structure = True
-pipeline_opts.table_structure_options.mode = TableFormerMode.FAST
+pipeline_opts.table_structure_options.mode = TableFormerMode.FAST #reduced runtime by 2x compared to accurate mode,similar output quality 
+                                                                  #since we pay the price of vision refinement anyways at least we have speed
 
 converter = DocumentConverter(
     format_options={
         InputFormat.PDF: PdfFormatOption(
             pipeline_options=pipeline_opts,
-            backend=PyPdfiumDocumentBackend,
+            backend=PyPdfiumDocumentBackend, # since we don't need OCR, we can use the faster PyPdfium backend instead of Tesseract
         )
     }
 )
 
 
-_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]") # control characters that break JSON and Markdown rendering
 
 
 def _scrub(text):
+    """Remove control characters from text, which can break JSON and Markdown rendering."""
     return _CTRL_RE.sub("", text) if text else text
 
 

@@ -3,7 +3,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from . import config
+from . import config, fdo_records, rater
 from .convert import convert_pdf
 from .vocab import extract_vocab
 from .classify import classify_sections
@@ -64,6 +64,21 @@ def process_single_pdf(pdf_path, user_keys):
     return results
 
 
+def finalize_outputs():
+    """Fuse the per-model extractions into the user report, agreement stats, and FDO records.
+
+    Reads every *_extraction_*.json in the output dir, so it works for one model or many
+    (a single model just passes through with confidence 1.0 and no agreement rows).
+    """
+    by_file = rater.load_outputs()
+    if not by_file:
+        logger.warning("No extraction outputs found — skipping rating + FDO step.")
+        return
+    rater.rate(by_file)
+    out_path, n = fdo_records.write_records(config.OUTPUT_DIR)
+    logger.info(f"Wrote FDO records for {n} document(s) → {out_path}")
+
+
 def process_batch(pdf_dir, user_keys):
     pdf_dir = Path(pdf_dir)
     if not pdf_dir.exists():
@@ -109,11 +124,14 @@ def main():
 
     if Path(args.path).is_dir():
         results = process_batch(args.path, user_keys)
+        if results:
+            finalize_outputs()
         print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
     else:
         result = process_single_pdf(args.path, user_keys)
         if result:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            finalize_outputs()
+            print(json.dumps(result, indent=2, ensure_ascii=False))  #document them well
         else:
             print("Extraction failed.")
             sys.exit(1)

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+
 ROOT = Path(__file__).resolve().parents[2]
 
 PDF_DIR = ROOT / "pdf"
@@ -9,30 +10,7 @@ INTERMEDIATE_DIR = ROOT / "intermediate"
 OUTPUT_DIR = ROOT / "output"
 TEMPLATES_DIR = ROOT / "templates"
 MODELS_DIR = ROOT / "models"
-
-# LLM models
-OLLAMA_SCHEMA_MODEL = os.environ.get("OLLAMA_SCHEMA_MODEL", "glm-5.1:cloud")
-OLLAMA_EXTRACT_MODEL = os.environ.get("OLLAMA_EXTRACT_MODEL", "gemma4:31b-cloud")
-
-# models used for parallel extraction
-EXTRACTION_MODELS = [
-    "gemma4:31b-cloud",
-    "deepseek-v4-flash:cloud",
-    "glm-4.7:cloud",
-]
-EXTRACTION_WORKERS = 3
-OLLAMA_VISION_MODEL = os.environ.get("OLLAMA_VISION_MODEL", "kimi-k2.7-code:cloud") # qwen3-vl:235b-instruct-cloud is retired now unfortunately
-                                                                                    # will check if qwen3.5:397b-cloud is better than kimi-k2.7-code:cloud when it's out of private beta
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "ollama")
-MAX_LLM_RETRIES = 3
-PIPELINE_VERSION = "1.0"
-# ponytail: best-effort reproducibility. Remote :cloud models may ignore `seed`;
-# real determinism comes from the cached intermediate JSON, not the API.
-SEED = 0
-
-# embedding
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
+SECTION_CLASSIFIER_DIR = MODELS_DIR / "section_classifier"
 
 
 def _auto_device():
@@ -46,17 +24,17 @@ def _auto_device():
 
 EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE") or _auto_device()
 
-# thresholds 
+
+# The models to run for extraction — one or many (the pipeline votes across them when >1).
+# The first one is the "primary": used wherever a single model is needed (table text-refinement).
+EXTRACTION_MODELS = [m.strip() for m in os.environ["EXTRACTION_MODELS"].split(",") if m.strip()]
+assert EXTRACTION_MODELS, "EXTRACTION_MODELS in .env must list at least one model"
+
+# Tuning constants
 VOCAB_TOP_N = 50
 VOCAB_MAX_NGRAM = 4
 SIMILARITY_THRESHOLD = 0.55
 SEARCH_TOP_K = 25
-
-
 VISION_COMPLEXITY_THRESHOLD = 0.15
-VISION_PARALLELISM = int(os.environ.get("VISION_PARALLELISM", "4"))
-
-# expand short keys with domain vocabulary before embedding
+VISION_PARALLELISM = 4
 EXPAND_KEYS = True
-
-SECTION_CLASSIFIER_DIR = MODELS_DIR / "section_classifier"
