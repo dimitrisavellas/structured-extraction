@@ -7,7 +7,6 @@ import joblib
 from . import config
 from .features import build_features, context_rows
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 # Section classifier is a random forest model trained on labeled sections from the Docling dataset.
@@ -39,6 +38,17 @@ class SectionClassifier:
         return [dict(c, section_type=str(p)) for c, p in zip(ordered, preds)]
 
 
+_classifier = None
+
+
+def get_classifier():
+    """Load the ~89 MB random forest + its vectorizers once and reuse across PDFs."""
+    global _classifier
+    if _classifier is None:
+        _classifier = SectionClassifier()
+    return _classifier
+
+
 def classify_sections(pdf_stem):
     """
     Disk wrapper around SectionClassifier.classify for the batch pipeline.
@@ -54,7 +64,7 @@ def classify_sections(pdf_stem):
     if not items_path.exists():
         raise FileNotFoundError(f"Items not found: {items_path}. Run convert.py first.")
 
-    if out_path.exists():
+    if out_path.exists() and not config.FORCE:
         logger.info(f"Skipping {pdf_stem} — sections already exist")
         return json.loads(out_path.read_text(encoding="utf-8"))
 
@@ -78,8 +88,7 @@ def classify_sections(pdf_stem):
         if (text := (item.get("text") or "").strip())
     ]
 
-    classifier = SectionClassifier(model_dir=str(model_dir))
-    predicted = classifier.classify(text_chunks)
+    predicted = get_classifier().classify(text_chunks)
 
     # build output keeping original item order
     by_idx = {chunk["section_id"]: chunk for chunk in predicted}

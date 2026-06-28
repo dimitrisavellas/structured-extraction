@@ -213,6 +213,7 @@ your models by editing `.env` at the repo root (values shown are the defaults):
 | Extraction (1+, in parallel) | `EXTRACTION_MODELS` | `gemma4:31b-cloud,deepseek-v4-flash:cloud,glm-4.7:cloud` |
 | Vision (table cleanup) | `VISION_MODEL`    | `kimi-k2.7-code:cloud`           |
 | Embeddings         | `EMBEDDING_MODEL`     | `nomic-ai/nomic-embed-text-v1.5` |
+| Embedding batch size | `EMBED_BATCH_SIZE`  | `4` (small so long table sections don't OOM a local MPS/GPU; raise on a bigger GPU) |
 
 `EXTRACTION_MODELS` is a comma-separated list — list several models to extract in parallel
 and cross-check their agreement, or just **one** model if you prefer (the pipeline adapts and

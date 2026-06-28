@@ -30,6 +30,12 @@ EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE") or _auto_device()
 EXTRACTION_MODELS = [m.strip() for m in os.environ["EXTRACTION_MODELS"].split(",") if m.strip()]
 assert EXTRACTION_MODELS, "EXTRACTION_MODELS in .env must list at least one model"
 
+# When True (set by main.py --force), every cached pipeline step recomputes instead of skipping.
+FORCE = False
+
+# Section-type preference when deduping records that describe the same fact: table beats text beats list.
+SECTION_TYPE_PRIORITY = {"table": 0, "text": 1, "list": 2}
+
 # Tuning constants
 VOCAB_TOP_N = 50
 VOCAB_MAX_NGRAM = 4

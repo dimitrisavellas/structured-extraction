@@ -9,15 +9,24 @@ from sentence_transformers import SentenceTransformer
 from . import config
 from .paths import inter, read_json, write_json
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+# Attention memory is O(seq_len² × batch) and nomic's context is 8192 tokens, so a few long
+# table sections in one batch OOM the MPS/GPU. Cap the batch (EMBED_BATCH_SIZE in .env) to
+# bound peak memory for any doc size; per-item embeddings are identical regardless of batch.
+EMBED_BATCH_SIZE = int(os.environ["EMBED_BATCH_SIZE"])
+
+_model_cache = {}
 
 
 def _load_model(model_name=None):
-    """Load the embedding model, either from the provided name or from the environment variable."""
+    """Load the embedding model (from the given name or env), caching it so the hundreds-of-MB
+    SentenceTransformer is loaded once and reused across PDFs."""
     name = model_name or os.environ["EMBEDDING_MODEL"]
-    logger.info(f"Loading embedding model: {name} on {config.EMBEDDING_DEVICE}")
-    return SentenceTransformer(name, device=config.EMBEDDING_DEVICE, trust_remote_code=True)
+    if name not in _model_cache:
+        logger.info(f"Loading embedding model: {name} on {config.EMBEDDING_DEVICE}")
+        _model_cache[name] = SentenceTransformer(name, device=config.EMBEDDING_DEVICE, trust_remote_code=True)
+    return _model_cache[name]
 
 
 def _expand_key(key, vocab):
@@ -186,7 +195,7 @@ def embed_sections_and_keys(stem, user_keys=None, model_name=None):
 
     artifacts = [inter(stem, n) for n in ("section_embeddings.npy", "key_embeddings.npy",
                  "section_texts.json", "key_texts.json", "row_map.json")]
-    if all(p.exists() for p in artifacts):
+    if all(p.exists() for p in artifacts) and not config.FORCE:
         logger.info(f"Skipping embeddings — already exists for {stem}")
         return
 
@@ -209,8 +218,10 @@ def embed_sections_and_keys(stem, user_keys=None, model_name=None):
     logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows and {len(expanded)} keys...")
     # nomic-embed-v1.5 needs task prefixes: documents vs queries. Without them all
     # cosine sims are depressed and real matches get clipped under the 0.55 gate.
-    all_embs = model.encode([f"search_document: {t}" for t in all_texts], show_progress_bar=False)
-    key_embs = (model.encode([f"search_query: {k}" for k in expanded], show_progress_bar=False)
+    all_embs = model.encode([f"search_document: {t}" for t in all_texts],
+                            show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
+    key_embs = (model.encode([f"search_query: {k}" for k in expanded],
+                             show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
                 if expanded else np.array([]))
 
     _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals,

@@ -36,12 +36,12 @@ def process_single_pdf(pdf_path, user_keys):
     extract_vocab(md_path)
     classify_sections(stem)
 
-    process_tables(str(sections_path), pdf_path=str(pdf_path))
+    process_tables(str(sections_path))
 
     # tables Docling stripped to bare symbols can't be retrieved, so they'd never reach the
     # lazy-vision step below; de-garble them now so their recovered text gets embedded
     if tables_file.exists():
-        refine_symbol_only_tables(str(tables_file))
+        refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path))
 
     embed_sections_and_keys(stem, user_keys=user_keys)
 
@@ -56,7 +56,7 @@ def process_single_pdf(pdf_path, user_keys):
 
     if matched_idxs and tables_file.exists():
         logger.info("Refining matched complex tables...")
-        refine_matched_tables(str(tables_file), matched_idxs)
+        refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path))
 
     results = extract_parallel(stem, user_keys)
 
@@ -109,8 +109,10 @@ def main():
     parser.add_argument("path", help="Path to a PDF file or a directory of PDFs")
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
+    parser.add_argument("--force", action="store_true", help="Recompute every step, ignoring cached files")
     args = parser.parse_args()
 
+    config.FORCE = args.force
     user_keys = args.keys
     if not user_keys:
         print("Enter keys to extract (comma-separated):")

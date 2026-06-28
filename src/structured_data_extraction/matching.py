@@ -57,6 +57,10 @@ def normalize_key(key):
     return re.sub(r"[^a-z0-9_]", "_", unicodedata.normalize("NFKC", key).lower())
 
 
+def model_slug(model_name):
+    return re.sub(r"[^a-z0-9]+", "_", model_name.lower()).strip("_")
+
+
 def compare(name, a, b):
     if _empty(a) or _empty(b):
         return GAP

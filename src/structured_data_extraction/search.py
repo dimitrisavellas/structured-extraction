@@ -4,7 +4,6 @@ import numpy as np
 from . import config
 from .paths import inter, read_json, cached
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 

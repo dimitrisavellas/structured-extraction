@@ -1,14 +1,9 @@
 import json
-import re
 from collections import defaultdict
 from pathlib import Path
 from sklearn.metrics import cohen_kappa_score
 from . import config
-from .matching import same_fact, _empty, _as_number, _norm_text, _norm_unit, _META_FIELDS
-
-
-def _model_slug(model_name):
-    return re.sub(r"[^a-z0-9]+", "_", model_name.lower()).strip("_")
+from .matching import same_fact, _empty, _as_number, _norm_text, _norm_unit, _META_FIELDS, model_slug
 
 
 def _filled_fields(rec):
@@ -35,9 +30,6 @@ def fuse(records_by_model):
     return clusters
 
 
-_SEC_PRI = {"table": 0, "text": 1, "list": 2}
-
-
 def _best_section(records: list[dict]) -> str:
     """
     Return the highest-priority section_type found across the records.
@@ -51,7 +43,7 @@ def _best_section(records: list[dict]) -> str:
     The winning section_type as a string ("table", "text", "list", or "unknown").
     """
     types = [r.get("metadata", {}).get("section_type", "unknown") for r in records]
-    return min(types, key=lambda t: _SEC_PRI.get(t, 99))
+    return min(types, key=lambda t: config.SECTION_TYPE_PRIORITY.get(t, 99))
 
 
 def _fused_metadata(records: list[dict]) -> dict:
@@ -120,7 +112,7 @@ def dedup(facts, n_models):
 
 def load_outputs():
     by_file = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-    slug_to_model = {_model_slug(m): m for m in config.EXTRACTION_MODELS}
+    slug_to_model = {model_slug(m): m for m in config.EXTRACTION_MODELS}
     for path in sorted(Path(config.OUTPUT_DIR).glob("*_extraction_*.json")):
         stem, _, slug = path.stem.rpartition("_extraction_")
         model = slug_to_model.get(slug)

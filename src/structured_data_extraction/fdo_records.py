@@ -28,7 +28,7 @@ def fdo_envelope(stem, by_key):
             "document_type": _document_type(stem),
             "models": {
                 "schema_discovery": os.environ["SCHEMA_MODEL"],
-                "extraction": config.EXTRACTION_MODELS,
+                "extraction": run.get("models") or config.EXTRACTION_MODELS,
                 "vision": os.environ["VISION_MODEL"],
                 "embedding": os.environ["EMBEDDING_MODEL"],
             },

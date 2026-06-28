@@ -2,11 +2,10 @@ import argparse
 import json
 import logging
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 import instructor
 from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
@@ -15,7 +14,6 @@ from . import config, matching
 from .paths import inter, read_json, cached
 from .tables import strip_code_fence
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 jinja_env = Environment(loader=FileSystemLoader(config.TEMPLATES_DIR))
@@ -35,11 +33,14 @@ class ValueRecord(BaseModel):
     unit: str = Field(default="", description="Unit of measurement")
     metadata: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
 
-SECTION_TYPE_PRIORITY = {"table": 0, "text": 1, "list": 2}
+_raw = None
 
 
 def _raw_client():
-    return OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
+    global _raw
+    if _raw is None:
+        _raw = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
+    return _raw
 
 
 def _get_client():
@@ -47,12 +48,19 @@ def _get_client():
 
 
 def _build_extraction_model(schema, user_keys):
-    type_map = {"string": str, "number": float, "any": Any, "object": dict}
+    # number is Optional so a model returning null (e.g. "volume": null) still validates
+    type_map = {"string": str, "number": Optional[float], "any": Any, "object": dict}
+    # schema keys come straight from the LLM, which may not match normalize_key's casing
+    # (e.g. it returns "PSRR" but normalize_key("PSRR") == "psrr"). Look up normalized so an
+    # acronym field keeps its rich (differentiator/qualifier) schema instead of falling back
+    # to the generic ValueRecord.
+    schema_by_norm = ({matching.normalize_key(k): v for k, v in schema.items()}
+                      if isinstance(schema, dict) else {})
     field_defs = {}
 
     for key in user_keys:
         field_name = matching.normalize_key(key)
-        entry = schema.get(field_name)
+        entry = schema_by_norm.get(field_name)
         if not isinstance(entry, dict):
             entry = {}
         description = entry.get("description") or key
@@ -214,8 +222,8 @@ def _dedup_extraction(extraction):
             if existing is None:
                 best[dedup_key] = record
             else:
-                old_priority = SECTION_TYPE_PRIORITY.get(existing.get("metadata", {}).get("section_type", "unknown"), 99)
-                new_priority = SECTION_TYPE_PRIORITY.get(sec_type, 99)
+                old_priority = config.SECTION_TYPE_PRIORITY.get(existing.get("metadata", {}).get("section_type", "unknown"), 99)
+                new_priority = config.SECTION_TYPE_PRIORITY.get(sec_type, 99)
                 if new_priority < old_priority:
                     best[dedup_key] = record
         deduped[field] = list(best.values())
@@ -270,14 +278,10 @@ def _prepare_sections(stem):
     return md_text, vocab, unique
 
 
-def _model_slug(model_name):
-    return re.sub(r'[^a-z0-9]+', '_', model_name.lower()).strip('_')
-
-
 def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type):
-    slug = _model_slug(model_name)
+    slug = matching.model_slug(model_name)
     out_path = out_dir / f"{stem}_extraction_{slug}.json"
-    if out_path.exists():
+    if out_path.exists() and not config.FORCE:
         logger.info(f"[{model_name}] already exists, skipping")
         return json.loads(out_path.read_text(encoding="utf-8"))
 
@@ -309,13 +313,15 @@ def extract_parallel(stem, user_keys):
     out_dir = Path(config.OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # run provenance for the FDO envelope: when extraction first ran + the user's keys.
-    # cached so a re-run (which skips the cached per-model files) keeps the original stamp.
+    models = config.EXTRACTION_MODELS
+
+    # run provenance for the FDO envelope: when extraction first ran, the user's keys, and the
+    # models that actually ran. cached so a re-run (which skips the cached per-model files) keeps
+    # the original stamp — and the FDO record won't lie if EXTRACTION_MODELS later changes.
     cached(inter(stem, "run.json"),
            lambda: {"extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "user_keys": list(user_keys)})
-
-    models = config.EXTRACTION_MODELS
+                    "user_keys": list(user_keys),
+                    "models": list(models)})
 
     md_text, vocab, unique = _prepare_sections(stem)
 

@@ -23,8 +23,9 @@ def write_json(path, obj):
 
 
 def cached(path, build):
-    """Return the JSON at `path` if it exists, else `build()` then write + return it."""
+    """Return the JSON at `path` if it exists, else `build()` then write + return it.
+    Recomputes regardless of an existing file when config.FORCE is set."""
     path = Path(path)
-    if path.exists():
+    if path.exists() and not config.FORCE:
         return read_json(path)
     return write_json(path, build())

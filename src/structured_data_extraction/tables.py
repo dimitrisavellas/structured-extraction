@@ -11,7 +11,6 @@ import fitz
 from openai import OpenAI
 from . import config
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -224,7 +223,7 @@ def _expand_spans(html):
     return "\n".join(lines)
 
 
-def process_tables(sections_path, pdf_path=None):
+def process_tables(sections_path):
     sections_path = Path(sections_path)
     if not sections_path.exists():
         raise FileNotFoundError(f"Sections not found: {sections_path}")
@@ -233,7 +232,7 @@ def process_tables(sections_path, pdf_path=None):
     out_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_tables.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if out_path.exists():
+    if out_path.exists() and not config.FORCE:
         logger.info(f"Skipping tables — already exists")
         return json.loads(out_path.read_text(encoding="utf-8"))
 
@@ -244,13 +243,6 @@ def process_tables(sections_path, pdf_path=None):
         logger.info("No tables found")
         out_path.write_text("[]", encoding="utf-8")
         return []
-
-    # try to find the PDF if not provided
-    resolved_pdf = pdf_path
-    if not resolved_pdf:
-        candidate = Path(config.PDF_DIR) / f"{stem}.pdf"
-        if candidate.exists():
-            resolved_pdf = str(candidate)
 
     logger.info(f"Scoring {len(table_sections)} tables...")
     results = []
@@ -268,7 +260,6 @@ def process_tables(sections_path, pdf_path=None):
             "page": page,
             "content": content,
             "bbox": section.get("bbox"),
-            "pdf_path": resolved_pdf,
         })
 
     out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -276,9 +267,8 @@ def process_tables(sections_path, pdf_path=None):
     return results
 
 
-def _refine_one_table(table):
+def _refine_one_table(table, pdf_path):
     idx = table["section_idx"]
-    pdf_path = table.get("pdf_path")
     page = table.get("page", 1)
     content = table.get("content", "")
     bbox = table.get("bbox")
@@ -314,7 +304,7 @@ def _word_cell_ratio(content):
     return sum(1 for c in cells if _WORD_RE.search(c)) / len(cells)
 
 
-def refine_symbol_only_tables(tables_path):
+def refine_symbol_only_tables(tables_path, pdf_path=None):
     threshold = config.VISION_COMPLEXITY_THRESHOLD
     tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
     idxs = {t["section_idx"] for t in tables
@@ -322,15 +312,19 @@ def refine_symbol_only_tables(tables_path):
             and "|" in t.get("content", "") and _word_cell_ratio(t["content"]) < 0.10}
     if idxs:
         logger.info(f"Pre-refining {len(idxs)} symbol-only table(s) before embedding: {sorted(idxs)}")
-        refine_matched_tables(tables_path, idxs, finalize=False)
+        refine_matched_tables(tables_path, idxs, pdf_path=pdf_path)
 
 
-def refine_matched_tables(tables_path, matched_section_indices, finalize=True):
+def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
     tables_path = Path(tables_path)
     if not tables_path.exists():
         return []
 
     tables = json.loads(tables_path.read_text(encoding="utf-8"))
+
+    if not pdf_path:
+        candidate = Path(config.PDF_DIR) / f"{tables_path.stem.replace('_tables', '')}.pdf"
+        pdf_path = str(candidate) if candidate.exists() else None
 
     threshold = config.VISION_COMPLEXITY_THRESHOLD
     matched = [t for t in tables if t.get("section_idx") in matched_section_indices]
@@ -344,10 +338,6 @@ def refine_matched_tables(tables_path, matched_section_indices, finalize=True):
                     f"{threshold}; {skipped} simpler ones left as markdown")
 
     if not to_refine:
-        if finalize:
-            for table in tables:
-                table.pop("pdf_path", None)
-            tables_path.write_text(json.dumps(tables, indent=2, ensure_ascii=False), encoding="utf-8")
         return tables
 
     workers = max(1, min(config.VISION_PARALLELISM, len(to_refine)))
@@ -357,7 +347,7 @@ def refine_matched_tables(tables_path, matched_section_indices, finalize=True):
     vision_count = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_refine_one_table, table) for table in to_refine]
+        futures = [pool.submit(_refine_one_table, table, pdf_path) for table in to_refine]
         for fut in concurrent.futures.as_completed(futures):
             idx, html, used_vision = fut.result()
             if html is None:
@@ -370,9 +360,6 @@ def refine_matched_tables(tables_path, matched_section_indices, finalize=True):
                 vision_count += 1
             logger.info(f"  Section {idx}: refined ({len(html)} chars, vision={used_vision})")
 
-    if finalize:
-        for table in tables:
-            table.pop("pdf_path", None)
     tables_path.write_text(json.dumps(tables, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info(f"Refined {vision_count} tables via vision model (of {len(to_refine)} attempted)")
     return tables
