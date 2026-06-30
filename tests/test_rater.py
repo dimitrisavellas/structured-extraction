@@ -92,6 +92,12 @@ def test_strict_eq():
     assert _strict_eq({"value": "A", "metadata": {"x": 1}}, {"value": "A", "metadata": {"x": 2}}) is True
 
 
+def test_strict_eq_all_empty_is_equal():
+    # all shared fields empty -> nothing disagrees -> treated as the same fact (records merge in dedup)
+    assert _strict_eq({"value": ""}, {"value": None}) is True
+    assert _strict_eq({}, {}) is True
+
+
 def test_merge_into():
     existing = {"value": "A", "metadata": {"section_type": "table"}, "models": ["m1"]}
     incoming = {"value": "A", "metadata": {"section_type": "text"}, "models": ["m2"]}

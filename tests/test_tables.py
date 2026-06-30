@@ -40,6 +40,13 @@ def test_pipe_stats_hierarchy():
     assert ncols == 3
 
 
+def test_pipe_stats_ragged_rows():
+    # the middle row has one fewer pipe than the others -> ragged fraction > 0
+    ragged, _, _, ncols, _ = _pipe_stats("| A | B | C |\n| 1 | 2 |\n| 3 | 4 | 5 |")
+    assert ragged == pytest.approx(1 / 3)  # 1 of 3 rows breaks the modal column count
+    assert ncols == 3
+
+
 def test_score_table_complexity_simple_is_zero():
     assert score_table_complexity("| A | B |\n| --- | --- |\n| 1 | 2 |") == 0.0
 

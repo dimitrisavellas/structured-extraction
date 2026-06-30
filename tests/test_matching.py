@@ -100,3 +100,9 @@ def test_same_fact():
         {"value": "A", "metadata": {"x": 1}},
         {"value": "A", "metadata": {"x": 2}},
     ) is True
+
+
+def test_same_fact_all_empty_is_equal():
+    # every shared field is empty -> no field can disagree -> the two count as the same fact
+    assert same_fact({"value": ""}, {"value": None}) is True
+    assert same_fact({}, {}) is True
