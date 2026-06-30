@@ -9,6 +9,8 @@ OUT_PATH = Path(config.OUTPUT_DIR) / "fdo_records.json"
 
 
 def _run(stem):
+    """Load the run stamp extract.py wrote (extracted_at, user_keys, models) for the envelope's
+    provenance. Returns {} when it's missing so fdo_envelope falls back to its defaults."""
     path = inter(stem, "run.json")
     return read_json(path) if path.exists() else {}
 

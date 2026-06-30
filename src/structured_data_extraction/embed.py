@@ -11,9 +11,7 @@ from .paths import inter, read_json, write_json
 
 logger = logging.getLogger(__name__)
 
-# Attention memory is O(seq_len² × batch) and nomic's context is 8192 tokens, so a few long
-# table sections in one batch OOM the MPS/GPU. Cap the batch (EMBED_BATCH_SIZE in .env) to
-# bound peak memory for any doc size; per-item embeddings are identical regardless of batch.
+
 EMBED_BATCH_SIZE = int(os.environ["EMBED_BATCH_SIZE"])
 
 _model_cache = {}

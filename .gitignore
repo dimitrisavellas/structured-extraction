@@ -16,6 +16,10 @@ intermediate/
 output/
 markdown/
 
+# Input PDFs and validation set 
+pdf/
+validation/validation-set/
+
 # OS / editor cruft
 .DS_Store
 .idea/

@@ -45,12 +45,25 @@ def _scrub(text):
 
 
 def _get_item_text(item, label, doc):
+    """Turn one docling item into Markdown text.
+
+    Docling's whole-doc export gives one big string, we need the text for
+    each item on its own so it stays lined up with that item's label, page, and
+    bbox. So process each item by type: tables go through docling, list items
+    get their marker in front, a title gets one '#' and a section_header gets
+    '#' x its docling level, everything else is just its plain text. Gives back
+    "" when an item has no text.
+
+    The header depth feeds the section classifier (features.regex_features reads it
+    back off the '#' prefix), so keep emitting the level even though the markdown
+    export wouldn't strictly need it.
+    """
     # tables store content differently, need export_to_markdown
     if label == "table":
         try:
             return item.export_to_markdown(doc)
         except TypeError:
-            return item.export_to_markdown()
+            return item.export_to_markdown()  # older docling: no doc arg
 
     raw = getattr(item, "text", "") or ""
     if label == "list_item":
@@ -58,7 +71,7 @@ def _get_item_text(item, label, doc):
         return f"{marker} {raw}".strip() if raw else ""
     if label == "section_header":
         lvl = getattr(item, "level", None)
-        depth = min(max(int(lvl) if lvl else 2, 1), 6)
+        depth = min(max(int(lvl) if lvl else 2, 1), 6)  # docling level, default 2, clamped to 1..6
         return ("#" * depth + " " + raw) if raw else ""
     if label == "title":
         return ("# " + raw) if raw else ""
@@ -104,11 +117,11 @@ def convert_pdf(pdf_path):
 
         # collect items from docling
         items = []
-        for item, level in doc.iterate_items():
+        for item, _ in doc.iterate_items():
             label = str(item.label) if hasattr(item, 'label') else "unknown"
             text = _scrub(_get_item_text(item, label, doc))
             page, bbox = _get_bbox(item)
-            items.append({"label": label, "text": text, "level": level, "page": page, "bbox": bbox})
+            items.append({"label": label, "text": text, "page": page, "bbox": bbox})
 
         out_items.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
 

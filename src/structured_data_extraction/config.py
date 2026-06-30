@@ -25,8 +25,8 @@ def _auto_device():
 EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE") or _auto_device()
 
 
-# The models to run for extraction — one or many (the pipeline votes across them when >1).
-# The first one is the "primary": used wherever a single model is needed (table text-refinement).
+# The models to run for extraction, one or many 
+# The first one is the "primary": used wherever a single model is needed 
 EXTRACTION_MODELS = [m.strip() for m in os.environ["EXTRACTION_MODELS"].split(",") if m.strip()]
 assert EXTRACTION_MODELS, "EXTRACTION_MODELS in .env must list at least one model"
 

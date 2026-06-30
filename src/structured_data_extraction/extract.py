@@ -44,10 +44,19 @@ def _raw_client():
 
 
 def _get_client():
+    # instructor wraps the client so create(..., response_model=Model) returns a validated
+    # Pydantic object instead of raw text
     return instructor.from_openai(_raw_client(), mode=instructor.Mode.JSON)
 
 
 def _build_extraction_model(schema, user_keys):
+    """Build a Pydantic ExtractionResult model on the fly, one list field per user key.
+
+    A key whose discovered schema has a `fields` spec gets a bespoke record model (one
+    sub-field per entry, plus a synthesised `<name>_unit` when a field is unit-bearing and
+    there's no shared `unit`). Keys without a spec fall back to the generic ValueRecord.
+    The model is handed to Instructor as the response_model.
+    """
     # number is Optional so a model returning null (e.g. "volume": null) still validates
     type_map = {"string": str, "number": Optional[float], "any": Any, "object": dict}
     # schema keys come straight from the LLM, which may not match normalize_key's casing
@@ -92,6 +101,8 @@ def _build_extraction_model(schema, user_keys):
 
 
 def _merge_cleaned_tables(sections, tables):
+    """Swap each table section's content for its vision-cleaned HTML and tag every
+    non-header section with the most recent preceding heading (nearest_header)."""
     table_by_idx = {table["section_idx"]: table for table in tables}
     merged = []
     last_header = ""
@@ -101,6 +112,7 @@ def _merge_cleaned_tables(sections, tables):
         if section.get("type") == "header":
             last_header = (section.get("content") or "").strip()
 
+        # tables are keyed by section_idx: try the positional index first, then the stored one
         idx = i if i in table_by_idx else section.get("section_idx")
         if section.get("type") == "table" and idx in table_by_idx:
             cleaned = table_by_idx[idx].get("content", "")
@@ -115,6 +127,8 @@ def _merge_cleaned_tables(sections, tables):
 
 
 def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
+    """Render the matched sections into the prompt block: prefer full_content, prefix the nearest heading, and truncate long prose but
+    never tables."""
     parts = []
     for i, section in enumerate(sections):
         sec_type = section.get("type", "unknown")
@@ -133,6 +147,8 @@ def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
 
 
 def discover_schema(markdown_text, matched_sections, vocab, user_keys):
+    """Ask the schema LLM for each key's field shape. Returns document_type, schema,
+    pulling document_type out of the response's document_type"""
     template = jinja_env.get_template("schema_discovery.j2")
 
     section_content = _format_sections(matched_sections)
@@ -168,6 +184,8 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
 
 def extract_values(client, matched_sections, vocab, user_keys, schema,
                    document_type="unknown", source_file="", model=None):
+    """Run one extraction LLM through Instructor and return {field: [record dicts]}.
+    Retries up to MAX_LLM_RETRIES; returns {} if every attempt fails."""
     model = model or config.EXTRACTION_MODELS[0]
     template = jinja_env.get_template("extraction.j2")
 
@@ -211,10 +229,13 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
 
 
 def _dedup_extraction(extraction):
+    """Within each field, drop duplicate records, keeping the one from the highest-priority
+    section (table > text > list). Records are duplicates when all non-metadata fields match."""
     deduped = {}
     for field, records in extraction.items():
         best = {}
         for record in records:
+            # identity key over every field except metadata: equal values -> same fact
             dedup_key = tuple(sorted((k, str(v)) for k, v in record.items() if k != "metadata"))
 
             sec_type = record.get("metadata", {}).get("section_type", "unknown")
@@ -231,6 +252,8 @@ def _dedup_extraction(extraction):
 
 
 def _neighbor_line(sections, idx, side):
+    """Return the adjacent line beside section `idx`: the last line of the previous section
+    or the first line of the next. Empty string if that neighbour is a header/table or out of bounds."""
     j = idx - 1 if side == "prev" else idx + 1
     if not 0 <= j < len(sections):
         return ""
@@ -244,6 +267,12 @@ def _neighbor_line(sections, idx, side):
 
 
 def _prepare_sections(stem):
+    """Load cached matches/sections/vocab and build the deduped list of sections to extract from.
+
+    Each matched section is widened by one neighbour line on each side (so an orphaned label
+    keeps its value), then collapsed by section_idx keeping the highest-similarity hit.
+    Returns (markdown_text, vocab, sections_sorted_by_similarity).
+    """
     matches = read_json(inter(stem, "matches.json"))
     sections = read_json(inter(stem, "sections.json"))
     vocab = read_json(inter(stem, "vocab.json"))
@@ -279,6 +308,8 @@ def _prepare_sections(stem):
 
 
 def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type):
+    """Extract with one model, dedup, stamp each record with its model/doc_type, and write
+    output/<stem>_extraction_<slug>.json. Returns the cached file unchanged on a re-run."""
     slug = matching.model_slug(model_name)
     out_path = out_dir / f"{stem}_extraction_{slug}.json"
     if out_path.exists() and not config.FORCE:
@@ -310,6 +341,12 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
 
 
 def extract_parallel(stem, user_keys):
+    """Run every configured extraction model over one document in parallel.
+
+    Stamps run provenance (run.json), discovers the schema once for all models, then fans
+    _run_one_model out across EXTRACTION_WORKERS threads. Returns the per-model extraction
+    dicts for the runs that succeeded.
+    """
     out_dir = Path(config.OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 

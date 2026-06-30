@@ -35,11 +35,11 @@ def _best_section(records: list[dict]) -> str:
     Return the highest-priority section_type found across the records.
     Priority is table > text > list; an unknown/missing type loses to all of them.
 
-    Arguments
+    Arguments:
     records: A list of records, each a dict that may hold a "metadata" dict
         with a "section_type" key.
 
-    Returns
+    Returns:
     The winning section_type as a string ("table", "text", "list", or "unknown").
     """
     types = [r.get("metadata", {}).get("section_type", "unknown") for r in records]
@@ -62,6 +62,16 @@ def _fused_metadata(records: list[dict]) -> dict:
 
 
 def consensus(cluster, n_models):
+    """
+    Compute the consensus for a cluster of records.
+
+    Arguments
+    cluster: A dict mapping model names to their records.
+    n_models: The total number of models.
+
+    Returns
+    A dict representing the consensus record.
+    """
     recs = list(cluster.values())
     rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
@@ -80,6 +90,7 @@ def _fields_match(f, va, vb):
 
 
 def _strict_eq(a, b):
+    """Return True if a and b are the same fact (strict equality, no fuzzing)."""
     for f in (set(a) | set(b)) - _META_FIELDS:
         va, vb = a.get(f), b.get(f)
         if _empty(va) or _empty(vb):
@@ -90,6 +101,7 @@ def _strict_eq(a, b):
 
 
 def _merge_into(existing, incoming, n_models):
+    """ Merge incoming fact into existing fact, updating models and confidence."""
     models = sorted(set(existing["models"]) | set(incoming["models"]))
     rep = max((existing, incoming), key=_filled_fields)
     return {**{k: v for k, v in rep.items() if k not in _META_FIELDS},
@@ -100,6 +112,7 @@ def _merge_into(existing, incoming, n_models):
 
 
 def dedup(facts, n_models):
+    """Deduplicate a list of facts, merging those that are the same."""
     merged = []
     for fact in facts:
         match_idx = next((i for i, kept in enumerate(merged) if _strict_eq(fact, kept)), None)
@@ -150,7 +163,7 @@ def majority_cutoff(n):
     return n // 2 + 1
 
 
-def rate(by_file, models=None):
+def rate(by_file, models=None): 
     models = config.EXTRACTION_MODELS if models is None else models
     n = len(models)
     Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)

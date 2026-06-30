@@ -8,8 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(a, b):
-    a_norm = a / np.linalg.norm(a, axis=1, keepdims=True)
-    b_norm = b / np.linalg.norm(b, axis=1, keepdims=True)
+    # floor the norm so a zero-norm vector stays zero instead of 0/0 = nan, which would
+    a_norm = a / np.maximum(np.linalg.norm(a, axis=1, keepdims=True), 1e-12)
+    b_norm = b / np.maximum(np.linalg.norm(b, axis=1, keepdims=True), 1e-12)
     return a_norm @ b_norm.T
 
 

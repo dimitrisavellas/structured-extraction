@@ -67,7 +67,7 @@ def process_single_pdf(pdf_path, user_keys):
 def finalize_outputs():
     """Fuse the per-model extractions into the user report, agreement stats, and FDO records.
 
-    Reads every *_extraction_*.json in the output dir, so it works for one model or many
+    Reads every extraction.json in the output dir, so it works for one model or many
     (a single model just passes through with confidence 1.0 and no agreement rows).
     """
     by_file = rater.load_outputs()

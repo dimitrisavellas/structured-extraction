@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _ramp(x, lo, hi):
+    """Return a value between 0.0 and 1.0, ramping linearly from lo to hi."""
     if x <= lo:
         return 0.0
     if x >= hi:
@@ -23,6 +24,7 @@ def _ramp(x, lo, hi):
 
 
 def _keyword_score(text):
+    """Return a score between 0.0 and 1.0 based on the presence of keywords that indicate complexity."""
     keywords = ("colspan", "rowspan", "<figure", "<img", "nested")
     return sum(0.15 for kw in keywords if kw in text)
 
@@ -86,6 +88,7 @@ def score_table_complexity(content):
 
 
 def _render(pdf_path, page_number, bbox=None, dpi=200):
+    """Render a page (or a bounding box on a page) of a PDF to a base64-encoded PNG."""
     doc = fitz.open(pdf_path)
     idx = max(0, min(page_number - 1, len(doc) - 1))
     page = doc[idx]
@@ -125,6 +128,7 @@ TABLE_TEXT_PROMPT = (
 
 
 def strip_code_fence(text):
+    """Strip a code fence from the start and end of a string, if present."""
     text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
     text = re.sub(r"\n?```$", "", text)
     return text
@@ -167,6 +171,7 @@ def _call_text_model(table_md):
 
 
 class _TableParser(HTMLParser):
+    """Parse an HTML table into a list of rows, each row being a list of (tag, text, colspan, rowspan)."""
     def __init__(self):
         super().__init__()
         self.rows = []
@@ -197,6 +202,7 @@ class _TableParser(HTMLParser):
 
 
 def _expand_spans(html):
+    """Expand an HTML table so that every <td> is filled, repeating values for merged cells."""
     parser = _TableParser()
     parser.feed(html)
     if not parser.rows:
@@ -224,11 +230,12 @@ def _expand_spans(html):
 
 
 def process_tables(sections_path):
+    """Process table sections from a JSON file, scoring their complexity and saving the results."""
     sections_path = Path(sections_path)
     if not sections_path.exists():
         raise FileNotFoundError(f"Sections not found: {sections_path}")
 
-    stem = sections_path.stem.replace("_sections", "")
+    stem = sections_path.stem.replace("_sections", "") 
     out_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_tables.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -268,6 +275,7 @@ def process_tables(sections_path):
 
 
 def _refine_one_table(table, pdf_path):
+    """Refine a single table section using the vision model, returning the updated HTML."""
     idx = table["section_idx"]
     page = table.get("page", 1)
     content = table.get("content", "")
@@ -297,11 +305,11 @@ _WORD_RE = re.compile(r"[A-Za-z]{4,}")
 
 
 def _word_cell_ratio(content):
-    cells = [c.strip() for line in content.splitlines() for c in line.split("|")
+    cells = [c.strip() for line in content.splitlines() for c in line.split("|") # skip empty lines and separator rows
              if c.strip() and set(c.strip()) != {"-"}]
     if len(cells) < 12:
         return 1.0
-    return sum(1 for c in cells if _WORD_RE.search(c)) / len(cells)
+    return sum(1 for c in cells if _WORD_RE.search(c)) / len(cells) # fraction of cells containing at least one word of 4+ letters
 
 
 def refine_symbol_only_tables(tables_path, pdf_path=None):
@@ -309,13 +317,21 @@ def refine_symbol_only_tables(tables_path, pdf_path=None):
     tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
     idxs = {t["section_idx"] for t in tables
             if t.get("complexity_score", 0) >= threshold
-            and "|" in t.get("content", "") and _word_cell_ratio(t["content"]) < 0.10}
+            and "|" in t.get("content", "") and _word_cell_ratio(t["content"]) < 0.10} 
     if idxs:
         logger.info(f"Pre-refining {len(idxs)} symbol-only table(s) before embedding: {sorted(idxs)}")
         refine_matched_tables(tables_path, idxs, pdf_path=pdf_path)
 
 
 def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
+    """Refine matched tables using the vision model, updating the JSON file in place.
+    Arguments:
+    tables_path: Path to the JSON file containing table sections.
+    matched_section_indices: A set of section indices to refine.
+    pdf_path: Optional path to the PDF file for rendering images.
+    Returns:
+    The updated list of table sections with refined HTML content.
+    """
     tables_path = Path(tables_path)
     if not tables_path.exists():
         return []
@@ -346,7 +362,7 @@ def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
     by_idx = {table["section_idx"]: table for table in tables}
     vision_count = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool: # use threads for tasks (PDF rendering, LLM calls)
         futures = [pool.submit(_refine_one_table, table, pdf_path) for table in to_refine]
         for fut in concurrent.futures.as_completed(futures):
             idx, html, used_vision = fut.result()
