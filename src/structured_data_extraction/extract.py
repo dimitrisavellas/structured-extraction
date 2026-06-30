@@ -320,6 +320,11 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
     extraction = extract_values(client, unique, vocab, user_keys, schema,
                                 doc_type, f"{stem}.pdf", model=model_name)
 
+    if not extraction:
+        # extract_values returns {} only when every attempt failed; surface it as a failure
+        # rather than writing an empty file that a later run would treat as a cached success.
+        raise RuntimeError("no extraction produced (all attempts failed)")
+
     pre = sum(len(v) for v in extraction.values())
     extraction = _dedup_extraction(extraction)
     post = sum(len(v) for v in extraction.values())
@@ -370,6 +375,7 @@ def extract_parallel(stem, user_keys):
     logger.info(f"Schema: document_type='{doc_type}'")
 
     results = []
+    failures = []
     workers = max(1, min(int(os.environ["EXTRACTION_WORKERS"]), len(models)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
@@ -381,8 +387,18 @@ def extract_parallel(stem, user_keys):
             try:
                 results.append(fut.result())
             except Exception as e:
-                logger.error(f"[{model_name}] extraction failed: {e}")
+                # one model failing doesn't sink the document — the others still write output.
+                # keep only the first line of the message so the user sees the cause, not a trace.
+                msg = next((ln for ln in str(e).splitlines() if ln.strip()), type(e).__name__)
+                failures.append((model_name, msg))
+                logger.error(f"[{model_name}] extraction failed: {msg}")
 
+    if failures and not results:
+        model_name, msg = failures[0]
+        logger.error(f"All {len(models)} extraction model(s) failed. First error — [{model_name}]: {msg}")
+    elif failures:
+        logger.warning(f"Partial extraction: {len(results)}/{len(models)} models OK; "
+                       f"failed: {', '.join(m for m, _ in failures)}")
     logger.info(f"Parallel extraction done: {len(results)}/{len(models)} succeeded")
     return results
 

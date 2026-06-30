@@ -36,11 +36,15 @@ FORCE = False
 # Section-type preference when deduping records that describe the same fact: table beats text beats list.
 SECTION_TYPE_PRIORITY = {"table": 0, "text": 1, "list": 2}
 
-# Tuning constants
-VOCAB_TOP_N = 50
-VOCAB_MAX_NGRAM = 4
-SIMILARITY_THRESHOLD = 0.55
-SEARCH_TOP_K = 25
-VISION_COMPLEXITY_THRESHOLD = 0.15
-VISION_PARALLELISM = 4
-EXPAND_KEYS = True
+# Tuning constants — overridable in .env; the values here are the defaults if unset.
+def _env_bool(name, default):
+    v = os.environ.get(name)
+    return default if v is None else v.strip().lower() in ("1", "true", "yes", "on")
+
+VOCAB_TOP_N = int(os.environ.get("VOCAB_TOP_N", 50))
+VOCAB_MAX_NGRAM = int(os.environ.get("VOCAB_MAX_NGRAM", 4))
+SIMILARITY_THRESHOLD = float(os.environ.get("SIMILARITY_THRESHOLD", 0.55))
+SEARCH_TOP_K = int(os.environ.get("SEARCH_TOP_K", 25))
+VISION_COMPLEXITY_THRESHOLD = float(os.environ.get("VISION_COMPLEXITY_THRESHOLD", 0.15))
+VISION_PARALLELISM = int(os.environ.get("VISION_PARALLELISM", 4))
+EXPAND_KEYS = _env_bool("EXPAND_KEYS", True)

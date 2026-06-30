@@ -80,12 +80,22 @@ EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5
 EMBED_BATCH_SIZE=4        # small so long tables don't OOM a local GPU; raise on bigger hardware
 MAX_LLM_RETRIES=2         # per-model retry budget on extraction failures
 EXTRACTION_WORKERS=4      # parallel workers when running multiple extraction models
+
+# Pipeline tuning — OPTIONAL: omit this whole block and the defaults below apply.
+VOCAB_TOP_N=50                    # YAKE vocab terms kept per document
+VOCAB_MAX_NGRAM=4                 # longest phrase YAKE treats as one term
+SIMILARITY_THRESHOLD=0.55         # cosine floor for a section/row to count as a match
+SEARCH_TOP_K=25                   # max matches kept per key (above the threshold)
+VISION_COMPLEXITY_THRESHOLD=0.15  # min table complexity worth sending to the vision model
+VISION_PARALLELISM=4              # parallel vision calls when refining matched tables
+EXPAND_KEYS=true                  # expand each key with the document's own related vocab before search
 ```
 
 Notes:
 - `EXTRACTION_MODELS` is a comma-separated list. List several to cross-check agreement, or one to skip the agreement step. The first model is the "primary", used wherever a single model is needed (such as text-based table cleanup).
 - For a non-Ollama provider, set `LLM_BASE_URL` / `LLM_API_KEY` accordingly (for OpenAI: `https://api.openai.com/v1` and `sk-...`).
 - Shell environment variables override the file. Make sure every named model actually exists on your provider, or that step retries and then fails.
+- The **pipeline tuning** block is optional: every value falls back to the default shown above if it's absent from `.env`. They are the knobs for recall vs. cost — e.g. lower `SIMILARITY_THRESHOLD` or raise `SEARCH_TOP_K` to retrieve more (and feed the LLM more), raise `VISION_COMPLEXITY_THRESHOLD` to send fewer tables to the (slow) vision model.
 
 ## Usage
 

@@ -1,6 +1,9 @@
+import logging
 import re
 import unicodedata
 from rapidfuzz import fuzz
+
+logger = logging.getLogger(__name__)
 
 FUZZ_THRESHOLD = 85
 
@@ -54,7 +57,45 @@ def _norm_text(value):
 
 
 def normalize_key(key):
-    return re.sub(r"[^a-z0-9_]", "_", unicodedata.normalize("NFKC", key).lower())
+    # strip("_") so edge punctuation (a quote, a leading "+") can't produce a leading/trailing
+    # underscore — Pydantic rejects field names that start with "_".
+    return re.sub(r"[^a-z0-9_]", "_", unicodedata.normalize("NFKC", key).lower()).strip("_")
+
+
+def validate_keys(keys):
+    """Clean + validate user keys at the trust boundary, returning the cleaned key list.
+
+    Repairs the common cases (strips surrounding quotes/whitespace, drops blanks and exact
+    duplicates — logged) and rejects what can't become a valid, unique Pydantic field name:
+    a key with no alphanumerics (empty field name) or two distinct keys that normalize to the
+    same field name (a silent collision that would otherwise drop one key's data). Raises
+    ValueError with a user-facing message on unrepairable input.
+    """
+    cleaned = []
+    for k in keys:
+        c = k.strip().strip("\"'").strip()
+        if not c:
+            if k.strip():
+                logger.info(f"Dropped key {k!r} (empty after cleaning)")
+            continue
+        if c != k:
+            logger.info(f"Cleaned key {k!r} -> {c!r}")
+        cleaned.append(c)
+
+    cleaned = list(dict.fromkeys(cleaned))  # drop exact duplicates, keep order
+    if not cleaned:
+        raise ValueError("no usable keys provided")
+
+    by_field = {}
+    for k in cleaned:
+        field = normalize_key(k)
+        if not field:
+            raise ValueError(f"key {k!r} has no letters or digits to form a field name — rename it")
+        if field in by_field:
+            raise ValueError(f"keys {by_field[field]!r} and {k!r} both map to field name "
+                             f"{field!r} — make them distinct")
+        by_field[field] = k
+    return cleaned
 
 
 def model_slug(model_name):

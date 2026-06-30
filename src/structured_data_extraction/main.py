@@ -2,8 +2,9 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
-from . import config, fdo_records, rater
+from . import config, fdo_records, matching, rater
 from .convert import convert_pdf
 from .vocab import extract_vocab
 from .classify import classify_sections
@@ -22,30 +23,39 @@ def process_single_pdf(pdf_path, user_keys):
         logger.error(f"PDF not found: {pdf_path}")
         return None
 
+    user_keys = matching.validate_keys(user_keys)
     stem = pdf_path.stem
     int_dir = Path(config.INTERMEDIATE_DIR)
     sections_path = int_dir / f"{stem}_sections.json"
     tables_file = int_dir / f"{stem}_tables.json"
     logger.info(f"=== Processing {pdf_path.name} ===")
 
-    md_path = convert_pdf(str(pdf_path))
+    timings = {}
+
+    def stage(label, fn):
+        t0 = time.perf_counter()
+        try:
+            return fn()
+        finally:
+            timings[label] = timings.get(label, 0.0) + time.perf_counter() - t0
+
+    md_path = stage("convert", lambda: convert_pdf(str(pdf_path)))
     if md_path is None:
         logger.error(f"Conversion failed for {pdf_path.name}")
         return None
 
-    extract_vocab(md_path)
-    classify_sections(stem)
-
-    process_tables(str(sections_path))
+    stage("vocab", lambda: extract_vocab(md_path))
+    stage("classify", lambda: classify_sections(stem))
+    stage("tables", lambda: process_tables(str(sections_path)))
 
     # tables Docling stripped to bare symbols can't be retrieved, so they'd never reach the
     # lazy-vision step below; de-garble them now so their recovered text gets embedded
     if tables_file.exists():
-        refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path))
+        stage("pre-refine", lambda: refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path)))
 
-    embed_sections_and_keys(stem, user_keys=user_keys)
+    stage("embed", lambda: embed_sections_and_keys(stem, user_keys=user_keys))
 
-    matches = search(stem, original_keys=user_keys)
+    matches = stage("search", lambda: search(stem, original_keys=user_keys))
 
     # refine matched complex tables with vision model
     matched_idxs = {
@@ -56,12 +66,34 @@ def process_single_pdf(pdf_path, user_keys):
 
     if matched_idxs and tables_file.exists():
         logger.info("Refining matched complex tables...")
-        refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path))
+        stage("refine", lambda: refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path)))
 
-    results = extract_parallel(stem, user_keys)
+    results = stage("extract", lambda: extract_parallel(stem, user_keys))
 
+    _log_run_summary(stem, timings, results, matches)
     logger.info(f"=== Done with {pdf_path.name} ===")
     return results
+
+
+def _log_run_summary(stem, timings, results, matches):
+    """End-of-run legibility: one line per stage with its wall-clock time, then a record count
+    broken down by the section type each record came from (table/text/list)."""
+    by_source, total = {}, 0
+    for res in results:
+        for records in res.values():
+            for record in records:
+                total += 1
+                src = (record.get("metadata") or {}).get("section_type") or "unknown"
+                by_source[src] = by_source.get(src, 0) + 1
+    sources = ", ".join(f"{k}={v}" for k, v in sorted(by_source.items())) or "none"
+    matched = sum(1 for hits in matches.values() if hits)
+    stages = "".join(f"\n  {label:<11}{secs:6.1f}s" for label, secs in timings.items())
+    logger.info(
+        f"=== Run summary: {stem} ==={stages}"
+        f"\n  {'TOTAL':<11}{sum(timings.values()):6.1f}s"
+        f"\n  records: {total} ({sources}) from {len(results)} model(s); "
+        f"keys matched: {matched}/{len(matches)}"
+    )
 
 
 def finalize_outputs():
@@ -118,9 +150,12 @@ def main():
         print("Enter keys to extract (comma-separated):")
         raw = input("> ").strip()
         user_keys = [k.strip() for k in raw.split(",") if k.strip()]
-        if not user_keys:
-            print("No keys provided.")
-            sys.exit(1)
+
+    try:
+        user_keys = matching.validate_keys(user_keys or [])
+    except ValueError as e:
+        print(f"Invalid keys: {e}")
+        sys.exit(1)
 
     config.OUTPUT_DIR = args.output
 
@@ -129,6 +164,9 @@ def main():
         if results:
             finalize_outputs()
         print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
+        if not results:
+            print("No documents produced any extraction.")
+            sys.exit(1)
     else:
         result = process_single_pdf(args.path, user_keys)
         if result:

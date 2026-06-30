@@ -1,3 +1,5 @@
+import pytest
+
 from structured_data_extraction.matching import (
     GAP,
     MATCH,
@@ -11,6 +13,7 @@ from structured_data_extraction.matching import (
     model_slug,
     normalize_key,
     same_fact,
+    validate_keys,
 )
 
 
@@ -89,6 +92,32 @@ def test_model_slug():
 def test_normalize_key():
     assert normalize_key("Pin Name") == "pin_name"
     assert normalize_key("V-DD") == "v_dd"
+    # edge punctuation must not yield a leading/trailing underscore (Pydantic rejects "_name")
+    assert normalize_key('"Net Income"') == "net_income"
+    assert normalize_key("+5V") == "5v"
+    assert normalize_key("###") == ""  # nothing alphanumeric -> empty
+
+
+def test_validate_keys_repairs():
+    # surrounding quotes/whitespace stripped, blanks and exact dups dropped, order kept
+    assert validate_keys(['"Net Income"', " Inventories ", "", "Net Income"]) == [
+        "Net Income", "Inventories"]
+
+
+def test_validate_keys_rejects_empty_field_name():
+    with pytest.raises(ValueError):
+        validate_keys(["+/"])  # normalizes to "" -> no valid field name
+
+
+def test_validate_keys_rejects_collision():
+    # two distinct keys that normalize to the same field name would silently drop one
+    with pytest.raises(ValueError):
+        validate_keys(["Net Income", "net-income"])
+
+
+def test_validate_keys_rejects_all_blank():
+    with pytest.raises(ValueError):
+        validate_keys(["   ", '""'])
 
 
 def test_same_fact():
