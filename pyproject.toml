@@ -9,7 +9,7 @@ description = "Pipeline for extracting structured data (tables, sections, key/va
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Dimitrios", email = "dimitrisavellas8@gmail.com" }]
+authors = [{ name = "Dimitrios Avellas", email = "dimitrisavellas8@gmail.com" }]
 
 # Mirrors requirements.txt.
 dependencies = [

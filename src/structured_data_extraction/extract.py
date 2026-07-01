@@ -357,13 +357,10 @@ def extract_parallel(stem, user_keys):
 
     models = config.EXTRACTION_MODELS
 
-    # run provenance for the FDO envelope: when extraction first ran, the user's keys, and the
-    # models that actually ran. cached so a re-run (which skips the cached per-model files) keeps
-    # the original stamp — and the FDO record won't lie if EXTRACTION_MODELS later changes.
+
     cached(inter(stem, "run.json"),
            lambda: {"extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "user_keys": list(user_keys),
-                    "models": list(models)})
+                    "user_keys": list(user_keys)})
 
     md_text, vocab, unique = _prepare_sections(stem)
 

@@ -1,16 +1,14 @@
-import json
 import os
 from pathlib import Path
 from . import config
-from .paths import inter, read_json
+from .paths import inter, read_json, write_json
 
-USER_REPORT = Path(config.OUTPUT_DIR) / "user_report.json"
-OUT_PATH = Path(config.OUTPUT_DIR) / "fdo_records.json"
+FUSED = Path(config.OUTPUT_DIR) / "fused.json"
 
 
 def _run(stem):
-    """Load the run stamp extract.py wrote (extracted_at, user_keys, models) for the envelope's
-    provenance. Returns {} when it's missing so fdo_envelope falls back to its defaults."""
+    """Load the run stamp extract.py wrote (extracted_at, user_keys) for the envelope's
+    provenance. Returns {} when it's missing so make_record falls back to its defaults."""
     path = inter(stem, "run.json")
     return read_json(path) if path.exists() else {}
 
@@ -20,7 +18,9 @@ def _document_type(stem):
     return read_json(path).get("document_type", "unknown") if path.exists() else "unknown"
 
 
-def fdo_envelope(stem, by_key):
+def make_record(stem, by_key):
+    """Wrap one document's fused facts in a metadata envelope: a type tag, a timestamp, and
+    provenance (source file, document type, the models used, and the user's keys)."""
     run = _run(stem)
     return {
         "type": "ExtractionResult",
@@ -30,31 +30,27 @@ def fdo_envelope(stem, by_key):
             "document_type": _document_type(stem),
             "models": {
                 "schema_discovery": os.environ["SCHEMA_MODEL"],
-                "extraction": run.get("models") or config.EXTRACTION_MODELS,
                 "vision": os.environ["VISION_MODEL"],
                 "embedding": os.environ["EMBEDDING_MODEL"],
             },
             "user_keys": run.get("user_keys", []),
         },
-        **by_key,  
+        **by_key,
     }
 
 
-def build_records(path=USER_REPORT):
+def build_records(path=FUSED):
     report = read_json(path)
-    return {stem: fdo_envelope(stem, by_key) for stem, by_key in report.items()}
+    return {stem: make_record(stem, by_key) for stem, by_key in report.items()}
 
 
 def write_records(output_dir):
-    """Build FDO envelopes from <output_dir>/user_report.json and write fdo_records.json.
-
-    Takes output_dir explicitly so the pipeline can honour a --output override
-    (config.OUTPUT_DIR may be mutated at runtime, after this module is imported).
-    """
+    """Wrap every document's fused facts in a provenance envelope and write records.json.
+    Keeps all records; consumers filter by the `confidence` field (see filter_records.py)."""
     output_dir = Path(output_dir)
-    envelopes = build_records(output_dir / "user_report.json")
-    out_path = output_dir / "fdo_records.json"
-    out_path.write_text(json.dumps(envelopes, indent=2, ensure_ascii=False), encoding="utf-8")
+    envelopes = build_records(output_dir / "fused.json")
+    out_path = output_dir / "records.json"
+    write_json(out_path, envelopes)
     return out_path, len(envelopes)
 
 

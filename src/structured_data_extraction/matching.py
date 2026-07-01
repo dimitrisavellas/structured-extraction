@@ -66,7 +66,7 @@ def validate_keys(keys):
     """Clean + validate user keys at the trust boundary, returning the cleaned key list.
 
     Repairs the common cases (strips surrounding quotes/whitespace, drops blanks and exact
-    duplicates — logged) and rejects what can't become a valid, unique Pydantic field name:
+    duplicates) and rejects what can't become a valid, unique Pydantic field name:
     a key with no alphanumerics (empty field name) or two distinct keys that normalize to the
     same field name (a silent collision that would otherwise drop one key's data). Raises
     ValueError with a user-facing message on unrepairable input.

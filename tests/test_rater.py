@@ -4,14 +4,10 @@ from unittest.mock import patch
 from structured_data_extraction.rater import (
     _best_section,
     _filled_fields,
-    _fields_match,
     _fused_metadata,
     _group_by_doc,
-    _merge_into,
-    _strict_eq,
     agreement,
     consensus,
-    dedup,
     fuse,
     fuse_outputs,
     load_outputs,
@@ -75,51 +71,6 @@ def test_consensus():
     assert result["metadata"]["section_type"] == "table"
 
 
-def test_fields_match():
-    assert _fields_match("value", 10, 10.0) is True          # numeric
-    assert _fields_match("value", 10, 15) is False
-    assert _fields_match("unit", "millimeters", "mm") is True  # unit normalization
-    assert _fields_match("name", "Typical", "typ") is True     # text normalization
-    assert _fields_match("name", "foo", "bar") is False
-
-
-def test_strict_eq():
-    a = {"value": "10 mm", "unit": "mm"}
-    assert _strict_eq(a, {"value": "10 mm", "unit": "millimeters"}) is True   # unit synonym
-    assert _strict_eq(a, {"value": "20 mm", "unit": "mm"}) is False           # value differs
-    assert _strict_eq(a, {"value": "10 mm"}) is True                         # missing field is a gap, ignored
-    # only metadata differs -> still equal
-    assert _strict_eq({"value": "A", "metadata": {"x": 1}}, {"value": "A", "metadata": {"x": 2}}) is True
-
-
-def test_strict_eq_all_empty_is_equal():
-    # all shared fields empty -> nothing disagrees -> treated as the same fact (records merge in dedup)
-    assert _strict_eq({"value": ""}, {"value": None}) is True
-    assert _strict_eq({}, {}) is True
-
-
-def test_merge_into():
-    existing = {"value": "A", "metadata": {"section_type": "table"}, "models": ["m1"]}
-    incoming = {"value": "A", "metadata": {"section_type": "text"}, "models": ["m2"]}
-    merged = _merge_into(existing, incoming, n_models=2)
-    assert merged["models"] == ["m1", "m2"]
-    assert merged["confidence"] == 1.0
-    assert merged["metadata"]["section_type"] == "table"
-
-
-def test_dedup():
-    facts = [
-        {"value": "A", "unit": "mm", "models": ["m1"]},
-        {"value": "A", "unit": "millimeters", "models": ["m2"]},  # same fact as above
-        {"value": "B", "unit": "mm", "models": ["m3"]},
-    ]
-    merged = dedup(facts, n_models=3)
-    by_value = {f["value"]: f for f in merged}
-    assert len(merged) == 2
-    assert by_value["A"]["models"] == ["m1", "m2"]
-    assert by_value["A"]["confidence"] == round(2 / 3, 2)
-
-
 def test_load_outputs(tmp_path):
     (tmp_path / "doc1_extraction_model1.json").write_text(
         json.dumps({"field1": [{"value": "A"}]}), encoding="utf-8")
@@ -141,6 +92,16 @@ def test_fuse_outputs():
     assert facts[0] == {"source_file": "doc1.pdf", "field": "field1", "value": "A",
                         "confidence": 1.0, "models": ["model1", "model2"],
                         "metadata": {"section_type": "unknown", "specified": True}}
+
+
+def test_fuse_outputs_single_model_is_passthrough():
+    by_file = {"doc1": {"noise": {"m1": [
+        {"differentiator": "", "value": "4"},
+        {"differentiator": "AD840J", "value": "4"},
+    ]}}}
+    facts = fuse_outputs(by_file, ["m1"])
+    assert len(facts) == 2
+    assert all(f["confidence"] == 1.0 and f["models"] == ["m1"] for f in facts)
 
 
 def test_group_by_doc():
@@ -189,13 +150,22 @@ def test_rate(tmp_path):
         rate(by_file, models=["model1", "model2"])
 
     fused = json.loads((tmp_path / "fused.json").read_text(encoding="utf-8"))
-    user = json.loads((tmp_path / "user_report.json").read_text(encoding="utf-8"))
     report = json.loads((tmp_path / "rating_report.json").read_text(encoding="utf-8"))
 
-    # fused keeps the full view (incl. the below-cutoff fact); user_report drops it
+    # fused is the complete view 
+    assert not (tmp_path / "user_report.json").exists()
     assert fused["doc1"]["field1"][0]["metadata"]["section_type"] == "table"
     assert fused["doc1"]["field2"][0]["value"] == "B"
-    assert "field2" not in user["doc1"]
     assert report["facts"] == 2
     assert report["full_agreement"] == 1
     assert [f["field"] for f in report["partial_agreement"]] == ["field2"]
+
+
+def test_group_by_doc_sorts_by_confidence_desc():
+    facts = [
+        {"source_file": "a.pdf", "field": "f", "value": "lo", "confidence": 0.5},
+        {"source_file": "a.pdf", "field": "f", "value": "hi", "confidence": 1.0},
+    ]
+    recs = _group_by_doc(facts)["a"]["f"]
+    assert [r["confidence"] for r in recs] == [1.0, 0.5]
+    assert recs[0]["value"] == "hi"

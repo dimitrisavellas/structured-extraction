@@ -1,9 +1,9 @@
-import json
 from collections import defaultdict
 from pathlib import Path
 from sklearn.metrics import cohen_kappa_score
 from . import config
-from .matching import same_fact, _empty, _as_number, _norm_text, _norm_unit, _META_FIELDS, model_slug
+from .paths import read_json, write_json
+from .matching import same_fact, _empty, _META_FIELDS, model_slug
 
 
 def _filled_fields(rec):
@@ -62,65 +62,14 @@ def _fused_metadata(records: list[dict]) -> dict:
 
 
 def consensus(cluster, n_models):
-    """
-    Compute the consensus for a cluster of records.
-
-    Arguments
-    cluster: A dict mapping model names to their records.
-    n_models: The total number of models.
-
-    Returns
-    A dict representing the consensus record.
-    """
+    """Collapse a cluster (model -> record) into one fact: field values taken from the
+    most-filled record, confidence = agreeing models / n_models, the sorted list of agreeing
+    models, and the fused metadata."""
     recs = list(cluster.values())
     rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
     return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster),
             **fields, "metadata": _fused_metadata(recs)}
-
-
-def _fields_match(f, va, vb):
-    """Return True if va and vb are the same value for field f (strict equality, no fuzzing)."""
-    na, nb = _as_number(va), _as_number(vb)
-    if na is not None and nb is not None:
-        return na == nb
-    if f == "unit" or f.endswith("_unit"):
-        return _norm_unit(va) == _norm_unit(vb)
-    return _norm_text(va) == _norm_text(vb)
-
-
-def _strict_eq(a, b):
-    """Return True if a and b are the same fact (strict equality, no fuzzing)."""
-    for f in (set(a) | set(b)) - _META_FIELDS:
-        va, vb = a.get(f), b.get(f)
-        if _empty(va) or _empty(vb):
-            continue
-        if not _fields_match(f, va, vb):
-            return False
-    return True
-
-
-def _merge_into(existing, incoming, n_models):
-    """ Merge incoming fact into existing fact, updating models and confidence."""
-    models = sorted(set(existing["models"]) | set(incoming["models"]))
-    rep = max((existing, incoming), key=_filled_fields)
-    return {**{k: v for k, v in rep.items() if k not in _META_FIELDS},
-            "metadata": {**rep.get("metadata", {}),
-                         "section_type": _best_section([existing, incoming])},
-            "confidence": round(len(models) / n_models, 2),
-            "models": models}
-
-
-def dedup(facts, n_models):
-    """Deduplicate a list of facts, merging those that are the same."""
-    merged = []
-    for fact in facts:
-        match_idx = next((i for i, kept in enumerate(merged) if _strict_eq(fact, kept)), None)
-        if match_idx is not None:
-            merged[match_idx] = _merge_into(merged[match_idx], fact, n_models)
-        else:
-            merged.append(fact)
-    return merged
 
 
 def load_outputs():
@@ -131,7 +80,7 @@ def load_outputs():
         model = slug_to_model.get(slug)
         if model is None:
             continue
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_json(path)
 
         for field, records in data.items():
             if isinstance(records, list):
@@ -145,8 +94,8 @@ def fuse_outputs(by_file, models):
     for stem, fields in sorted(by_file.items()):
         for field, recs_by_model in sorted(fields.items()):
             clusters = fuse({m: recs_by_model.get(m, []) for m in models})
-            for f in dedup([consensus(c, n) for c in clusters], n):
-                facts.append({"source_file": f"{stem}.pdf", "field": field, **f})
+            for c in clusters:
+                facts.append({"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)})
     return facts
 
 
@@ -156,6 +105,10 @@ def _group_by_doc(facts):
         stem = Path(f["source_file"]).stem
         grouped[stem][f["field"]].append({k: v for k, v in f.items()
                                           if k not in ("source_file", "field")})
+    # highest-confidence facts first within each key; stable, so ties keep fuse order
+    for fields in grouped.values():
+        for recs in fields.values():
+            recs.sort(key=lambda r: r.get("confidence", 0), reverse=True)
     return {stem: dict(fields) for stem, fields in grouped.items()}
 
 
@@ -169,16 +122,9 @@ def rate(by_file, models=None):
     Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     all_facts = fuse_outputs(by_file, models)
 
-    # fused.json is for full view 
+    # fused.json = the end result 
     fused_path = Path(config.OUTPUT_DIR) / "fused.json"
-    fused_path.write_text(json.dumps(_group_by_doc(all_facts), indent=2, ensure_ascii=False),
-                          encoding="utf-8")
-
-    cutoff = majority_cutoff(n)
-    user_facts = [f for f in all_facts if len(f["models"]) >= cutoff]
-    user_path = Path(config.OUTPUT_DIR) / "user_report.json"
-    user_path.write_text(json.dumps(_group_by_doc(user_facts), indent=2, ensure_ascii=False),
-                         encoding="utf-8")
+    write_json(fused_path, _group_by_doc(all_facts))
 
     rows = agreement(all_facts, models)
     report = {
@@ -189,9 +135,9 @@ def rate(by_file, models=None):
         "partial_agreement": [f for f in all_facts if len(f["models"]) < n],
     }
     out = Path(config.OUTPUT_DIR) / "rating_report.json"
-    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_json(out, report)
     _print_agreement(len(all_facts), rows)
-    print(f"\nwrote {out}\nwrote {fused_path}\nwrote {user_path}")
+    print(f"\nwrote {out}\nwrote {fused_path}")
 
 
 def agreement(facts, models):

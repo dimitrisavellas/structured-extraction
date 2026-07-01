@@ -177,10 +177,15 @@ def main():
         print(f"No extraction outputs in {config.OUTPUT_DIR} — run without --no-run first.")
         return
 
-    rater.rate(by_file) # writes the user report
+    rater.rate(by_file)  # writes fused.json (the complete, confidence-sorted view)
 
     gt = json.loads(GT_PATH.read_text(encoding="utf-8"))
-    user_report = json.loads((Path(config.OUTPUT_DIR) / "user_report.json").read_text(encoding="utf-8"))
+    # user_report.json is retired; derive the scored slice (>= majority cutoff) from fused.
+    fused = json.loads((Path(config.OUTPUT_DIR) / "fused.json").read_text(encoding="utf-8"))
+    cutoff = rater.majority_cutoff(len(config.EXTRACTION_MODELS))
+    user_report = {stem: {field: [r for r in recs if len(r["models"]) >= cutoff]
+                          for field, recs in fields.items()}
+                   for stem, fields in fused.items()}
     report = evaluate(by_file, user_report, gt, config.EXTRACTION_MODELS, only=args.stems)
     print_report(report)
     out = Path(config.OUTPUT_DIR) / "validation_report.json"

@@ -4,7 +4,7 @@ import logging
 import sys
 import time
 from pathlib import Path
-from . import config, fdo_records, matching, rater
+from . import config, records, filter_records, matching, rater
 from .convert import convert_pdf
 from .vocab import extract_vocab
 from .classify import classify_sections
@@ -96,19 +96,29 @@ def _log_run_summary(stem, timings, results, matches):
     )
 
 
-def finalize_outputs():
-    """Fuse the per-model extractions into the user report, agreement stats, and FDO records.
+def finalize_outputs(levels=None):
+    """Fuse the per-model extractions into fused.json, agreement stats, and provenance records.
 
     Reads every extraction.json in the output dir, so it works for one model or many
     (a single model just passes through with confidence 1.0 and no agreement rows).
     """
     by_file = rater.load_outputs()
     if not by_file:
-        logger.warning("No extraction outputs found — skipping rating + FDO step.")
+        logger.warning("No extraction outputs found — skipping rating + records step.")
         return
     rater.rate(by_file)
-    out_path, n = fdo_records.write_records(config.OUTPUT_DIR)
-    logger.info(f"Wrote FDO records for {n} document(s) → {out_path}")
+    out_path, n = records.write_records(config.OUTPUT_DIR)
+    logger.info(f"Wrote records for {n} document(s) → {out_path}")
+    _offer_filter(out_path, levels)
+
+
+def _offer_filter(records_path, levels):
+    """user filter records by confidence at the end of a run. If confidence came in as an argument
+    (--levels) uses them, otherwise offers the interactive menu. One model means every record
+    is confidence 1.0, so there's nothing to filter and we bail."""
+    if len(config.EXTRACTION_MODELS) < 2:
+        return
+    filter_records.run(records_path, levels=levels)
 
 
 def process_batch(pdf_dir, user_keys):
@@ -142,6 +152,9 @@ def main():
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
     parser.add_argument("--force", action="store_true", help="Recompute every step, ignoring cached files")
+    parser.add_argument("--levels", nargs="+", metavar="LVL",
+                        help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
+                             "omit to be prompted after extraction")
     args = parser.parse_args()
 
     config.FORCE = args.force
@@ -162,7 +175,7 @@ def main():
     if Path(args.path).is_dir():
         results = process_batch(args.path, user_keys)
         if results:
-            finalize_outputs()
+            finalize_outputs(args.levels)
         print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
         if not results:
             print("No documents produced any extraction.")
@@ -170,7 +183,7 @@ def main():
     else:
         result = process_single_pdf(args.path, user_keys)
         if result:
-            finalize_outputs()
+            finalize_outputs(args.levels)
             print(json.dumps(result, indent=2, ensure_ascii=False))  #document them well
         else:
             print("Extraction failed.")
