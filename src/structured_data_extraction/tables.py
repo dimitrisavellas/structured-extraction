@@ -115,14 +115,16 @@ TABLE_VISION_PROMPT = (
     "If a cell is merged/spanned in the original, REPEAT its value in every row and column it "
     "covers — do NOT use rowspan or colspan; every <td> must be filled. "
     "Preserve ALL values exactly as shown — do not omit or invent data. "
-    "Do NOT add any explanation, just output the HTML table.\n\n"
-    "Here is the markdown version of the table for reference (it may be garbled):\n"
+    "Do NOT add any explanation, just output the HTML table.\n"
 )
 
 TABLE_TEXT_PROMPT = (
-    "Convert the following markdown table to clean, semantic HTML. "
-    "Use proper <thead>, <tbody>, <th>, <td> tags. "
-    "Merge cells only where the original has merged cells. "
+    "The following is a table extracted from a PDF by an automated tool, so it may be "
+    "garbled: columns misaligned, cells split or merged wrongly, headers out of place. "
+    "Reconstruct it as clean, semantic HTML. Use proper <thead>, <tbody>, <th>, <td> tags. "
+    "If a cell is merged/spanned, REPEAT its value in every row and column it covers — "
+    "do NOT use rowspan or colspan; every <td> must be filled. "
+    "Preserve ALL values exactly as shown — do not omit or invent data. "
     "Do NOT add any explanation, just output the HTML table.\n\n"
 )
 
@@ -153,11 +155,11 @@ def _call_model(model, messages):
     return strip_code_fence(resp.choices[0].message.content.strip())
 
 
-def _call_vision_model(b64_img, table_md):
+def _call_vision_model(b64_img):
     messages = [{
         "role": "user",
         "content": [
-            {"type": "text", "text": TABLE_VISION_PROMPT + table_md},
+            {"type": "text", "text": TABLE_VISION_PROMPT},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}},
         ],
     }]
@@ -286,7 +288,7 @@ def _refine_one_table(table, pdf_path):
     if pdf_path and Path(pdf_path).exists():
         try:
             image_b64 = _render(pdf_path, page, bbox)
-            html = _call_vision_model(image_b64, content)
+            html = _call_vision_model(image_b64)
             used_vision = True
         except Exception as e:
             logger.warning(f"  Section {idx}: vision failed ({e}), falling back to text LLM")
