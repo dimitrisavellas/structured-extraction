@@ -47,6 +47,17 @@ Each step writes its output to disk and is skipped on a re-run if the file alrea
 
 Supporting: `matching.py` (same-fact equivalence), `features.py` (classifier feature vector), `paths.py` (cache filename conventions), `config.py` (loads `.env`, derives paths, auto-selects CUDA/MPS/CPU).
 
+## Design notes
+
+The rationale the one-line table compresses out — the non-obvious choices, keyed to the file that makes them:
+
+- **Convert (`convert.py`).** OCR is off and Docling's table model runs in `FAST` mode, roughly 2× faster. Turn OCR on for scanned documents(never really tested). Bounding boxes are translated from Docling's bottom-left origin to the top-left origin PyMuPDF uses later, so the two agree on where a table sits when it gets re-rendered.
+- **Classify (`classify.py`).** A small supervised RandomForest re-labels items rather than trusting Docling's own labels, which mislabel multi-sentence captions and sub-headers. Its output, `sections.json`, is the canonical content stream every later step reads.
+- **Tables (`tables.py`), symbol-only recovery.** Complex tables that Docling stripped down to bare symbols are rebuilt *before* embedding, not after. Those rows carry no words, so search could never retrieve them — meaning they'd never reach the lazy-vision refinement step either. De-garbling them up front gets their recovered text into the embeddings so they can match at all.
+- **Embed (`embed.py`), task prefixes.** nomic needs `search_document:` / `search_query:` prefixes; without them the similarities collapse toward each other and `SIMILARITY_THRESHOLD` stops discriminating. Sections are stacked before rows in the matrix and `search.py` relies on that ordering.
+- **Matching (`matching.py`).** Two records describe the same fact when their number and unit match exactly (after Unicode/dash normalisation) and their descriptor text clears a rapidfuzz similarity of 85 — fuzzy on the wording because models phrase conditions differently (`TA = −40°C` vs `T_A = -40°C`), exact on the number. Empty fields act as wildcards, so a sparse record still matches a fuller one.
+- **Prompts.** The two LLM prompts are Jinja templates in `templates/` — `schema_discovery.j2` (asks for each key's field shape and the document type) and `extraction.j2` (the actual value extraction). Edit them to tune behaviour; no code change needed.
+
 ## Installation
 
 **Requirements:** Python 3.11+, plus an OpenAI-compatible LLM endpoint (the defaults assume a local [Ollama](https://ollama.com)). The first run also downloads the embedding model from Hugging Face.
@@ -124,6 +135,55 @@ python -m structured_data_extraction.filter_records --levels 1.0 0.75         # 
 ```
 
 Confidence is `models-agreeing / total-models`. `filter_records` reads `records.json` and keeps any subset of the confidence tiers present in the data — pass `--levels` (e.g. `1.0 0.75`, or `all`), or omit it for an interactive menu. Needs more than one model to be meaningful.
+
+## Outputs
+
+Every stage caches its result under `intermediate/` and is skipped on a re-run if the file already exists; the finished deliverables land in `output/`.
+
+```
+intermediate/<stem>_items.json          docling items (label, page, bbox)
+              <stem>_vocab.json          YAKE vocabulary
+              <stem>_sections.json       classified content stream
+              <stem>_tables.json         tables + complexity scores
+              <stem>_*_embeddings.npy    section / key vectors
+              <stem>_matches.json        search hits per key
+              <stem>_run.json            run manifest (models, timings)
+
+output/<stem>_extraction_<model>.json    one file per extraction model
+       fused.json                        every fact, confidence-sorted per key  ← the deliverable
+       records.json                      fused.json wrapped in a provenance envelope, one per document
+       rating_report.json                agreement scoring + pairwise Cohen's kappa
+```
+
+A `records.json` entry pairs a provenance header with the extracted fields. Each field is a list of records sorted by confidence (`models-agreeing / total-models`), so the top record per key is the one the most models agreed on:
+
+```jsonc
+{
+  "0150200051": {
+    "type": "ExtractionResult",
+    "provenance": {
+      "source_file": "0150200051.pdf",
+      "document_type": "cable connector product datasheet",
+      "models": { "schema_discovery": "glm-5.1:cloud", "vision": "kimi-k2.7-code:cloud",
+                  "embedding": "nomic-ai/nomic-embed-text-v1.5" },
+      "user_keys": ["product family", "cable length", "Voltage", "net weight"]
+    },
+    "product_family": [
+      { "confidence": 1.0,  "models": ["deepseek-v4-flash:cloud", "gemma4:31b-cloud",
+                                       "gpt-oss:120b-cloud", "minimax-m2.5:cloud"],
+        "value": "Cable",        "metadata": { "section_type": "text", "specified": true } },
+      { "confidence": 0.25, "models": ["deepseek-v4-flash:cloud"],
+        "value": "Cable Series", "metadata": { "section_type": "text", "specified": true } }
+    ],
+    "voltage": [
+      { "confidence": 1.0, "models": ["deepseek-v4-flash:cloud", "gemma4:31b-cloud",
+                                      "gpt-oss:120b-cloud", "minimax-m2.5:cloud"],
+        "qualifier": "Maximum", "value": 60.0, "value_unit": "V AC",
+        "metadata": { "section_type": "text", "specified": true } }
+    ]
+  }
+}
+```
 
 ## Testing
 
