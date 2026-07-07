@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 import instructor
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, ChoiceLoader, FileSystemLoader, PackageLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
 from . import config, matching
@@ -16,7 +16,12 @@ from .tables import strip_code_fence
 
 logger = logging.getLogger(__name__)
 
-jinja_env = Environment(loader=FileSystemLoader(config.TEMPLATES_DIR))
+
+_loaders = []
+if os.environ.get("TEMPLATES_DIR"):
+    _loaders.append(FileSystemLoader(os.environ["TEMPLATES_DIR"]))
+_loaders.append(PackageLoader("structured_data_extraction", "templates"))
+jinja_env = Environment(loader=ChoiceLoader(_loaders))
 MAX_SECTION_CHARS = 5000
 
 

@@ -26,6 +26,7 @@ validation/validation-set/
 .vscode/
 
 # Packaging / caches
+dist/
 *.egg-info/
 .pytest_cache/
 

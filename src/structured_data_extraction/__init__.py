@@ -1,5 +1,4 @@
-from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(find_dotenv(usecwd=True))

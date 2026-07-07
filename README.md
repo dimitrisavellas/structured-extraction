@@ -56,25 +56,29 @@ The rationale the one-line table compresses out — the non-obvious choices, key
 - **Tables (`tables.py`), symbol-only recovery.** Complex tables that Docling stripped down to bare symbols are rebuilt *before* embedding, not after. Those rows carry no words, so search could never retrieve them — meaning they'd never reach the lazy-vision refinement step either. De-garbling them up front gets their recovered text into the embeddings so they can match at all.
 - **Embed (`embed.py`), task prefixes.** nomic needs `search_document:` / `search_query:` prefixes; without them the similarities collapse toward each other and `SIMILARITY_THRESHOLD` stops discriminating. Sections are stacked before rows in the matrix and `search.py` relies on that ordering.
 - **Matching (`matching.py`).** Two records describe the same fact when their number and unit match exactly (after Unicode/dash normalisation) and their descriptor text clears a rapidfuzz similarity of 85 — fuzzy on the wording because models phrase conditions differently (`TA = −40°C` vs `T_A = -40°C`), exact on the number. Empty fields act as wildcards, so a sparse record still matches a fuller one.
-- **Prompts.** The two LLM prompts are Jinja templates in `templates/` — `schema_discovery.j2` (asks for each key's field shape and the document type) and `extraction.j2` (the actual value extraction). Edit them to tune behaviour; no code change needed.
+- **Prompts.** The two LLM prompts are Jinja templates that ship inside the package — `schema_discovery.j2` (asks for each key's field shape and the document type) and `extraction.j2` (the actual value extraction). To tune them, run `structured-extract --dump-templates ./my-templates` for an editable copy, edit it, and set `TEMPLATES_DIR=./my-templates`. Overrides are per-file: change just `extraction.j2` and the other still loads its packaged default. No code change needed.
 
 ## Installation
 
 **Requirements:** Python 3.11+, plus an OpenAI-compatible LLM endpoint (the defaults assume a local [Ollama](https://ollama.com)). The first run also downloads the embedding model from Hugging Face.
 
 ```bash
-# 1. clone and enter the repo
-git clone <repo-url> && cd structured-data-extraction
-
-# 2. create and activate a virtualenv
+# 1. create and activate a virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# 3. install the package 
+# 2. install from PyPI
+pip install structured-data-extraction
+```
+
+To modify the pipeline itself, install an editable checkout instead:
+
+```bash
+git clone <repo-url> && cd structured-data-extraction
 pip install -e .
 ```
 
-**4. Create a `.env` at the repo root.** It is required: the package reads these values on import and will not start without them. Copy this block and edit the values:
+**Create a `.env` in the directory you run the tool from.** It is required: the package reads these values on startup and will not run without them. It searches the working directory and its parents, and real shell environment variables override the file. Copy this block and edit the values:
 
 ```bash
 # Provider: any OpenAI-compatible endpoint (Ollama, OpenAI, ...)

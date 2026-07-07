@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import time
+from importlib import resources
 from pathlib import Path
 from . import config, records, filter_records, matching, rater
 from .convert import convert_pdf
@@ -146,16 +147,39 @@ def process_batch(pdf_dir, user_keys):
     return results
 
 
+def _dump_templates(dest):
+    """Copy the packaged prompt templates to `dest` for editing, then the user points
+    TEMPLATES_DIR at that folder to use them. Only the built-in .j2 defaults are written;
+    read_text/write_text keeps this working even if the package is imported from a zip."""
+    src = resources.files("structured_data_extraction") / "templates"
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    for t in src.iterdir():
+        if t.name.endswith(".j2"):
+            (dest / t.name).write_text(t.read_text(encoding="utf-8"), encoding="utf-8")
+    return dest
+
+
 def main():
     parser = argparse.ArgumentParser(description="Document extraction pipeline")
-    parser.add_argument("path", help="Path to a PDF file or a directory of PDFs")
+    parser.add_argument("path", nargs="?", help="Path to a PDF file or a directory of PDFs")
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
     parser.add_argument("--force", action="store_true", help="Recompute every step, ignoring cached files")
     parser.add_argument("--levels", nargs="+", metavar="LVL",
                         help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
                              "omit to be prompted after extraction")
+    parser.add_argument("--dump-templates", metavar="DIR",
+                        help="Write the built-in prompt templates to DIR for editing, then exit; "
+                             "point TEMPLATES_DIR at that folder to use your edits")
     args = parser.parse_args()
+
+    if args.dump_templates:
+        dest = _dump_templates(args.dump_templates)
+        print(f"Wrote templates to {dest}\nSet TEMPLATES_DIR={dest} to use your edits.")
+        return
+    if not args.path:
+        parser.error("a PDF file or directory is required (unless using --dump-templates)")
 
     config.FORCE = args.force
     user_keys = args.keys

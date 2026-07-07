@@ -1,16 +1,17 @@
 import os
 from pathlib import Path
+from importlib import resources
 
 
-ROOT = Path(__file__).resolve().parents[2]
 
-PDF_DIR = ROOT / "pdf"
-MARKDOWN_DIR = ROOT / "markdown"
-INTERMEDIATE_DIR = ROOT / "intermediate"
-OUTPUT_DIR = ROOT / "output"
-TEMPLATES_DIR = ROOT / "templates"
-MODELS_DIR = ROOT / "models"
-SECTION_CLASSIFIER_DIR = MODELS_DIR / "section_classifier"
+CWD = Path.cwd()
+PDF_DIR = CWD / "pdf"
+MARKDOWN_DIR = CWD / "markdown"
+INTERMEDIATE_DIR = CWD / "intermediate"
+OUTPUT_DIR = CWD / "output"
+
+
+SECTION_CLASSIFIER_DIR = resources.files("structured_data_extraction") / "models" / "section_classifier"
 
 
 def _auto_device():
