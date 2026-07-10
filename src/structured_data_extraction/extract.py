@@ -405,7 +405,7 @@ def extract_parallel(stem, user_keys):
     return results
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Extract values from document")
     parser.add_argument("--stem", required=True)
     parser.add_argument("--keys", nargs="+", required=True)
@@ -417,3 +417,7 @@ if __name__ == "__main__":
         model = next((rec.get("metadata", {}).get("model")
                       for records in result.values() for rec in records), "?")
         print(f"{model}: {total} records")
+
+
+if __name__ == "__main__":
+    main()

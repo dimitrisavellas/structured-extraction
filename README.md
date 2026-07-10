@@ -49,7 +49,7 @@ Supporting: `matching.py` (same-fact equivalence), `features.py` (classifier fea
 
 ## Design notes
 
-The rationale the one-line table compresses out — the non-obvious choices, keyed to the file that makes them:
+Non-obvious design choices explained per file:
 
 - **Convert (`convert.py`).** OCR is off and Docling's table model runs in `FAST` mode, roughly 2× faster. Turn OCR on for scanned documents(never really tested). Bounding boxes are translated from Docling's bottom-left origin to the top-left origin PyMuPDF uses later, so the two agree on where a table sits when it gets re-rendered.
 - **Classify (`classify.py`).** A small supervised RandomForest re-labels items rather than trusting Docling's own labels, which mislabel multi-sentence captions and sub-headers. Its output, `sections.json`, is the canonical content stream every later step reads.
@@ -89,7 +89,7 @@ LLM_API_KEY=ollama
 SCHEMA_MODEL=glm-5.1:cloud
 EXTRACTION_MODELS=gemma4:31b-cloud      # comma-separated for parallel voting
 VISION_MODEL=kimi-k2.7-code:cloud       # must have vision abilities
-EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5
+EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5  # HugginFace model ID (downloaded locally on the first run)
 
 # Tuning
 EMBED_BATCH_SIZE=4        # small so long tables don't OOM a local GPU; raise on bigger hardware
@@ -121,21 +121,29 @@ structured-extract pdf/1167fc.pdf --keys gain CMRR "supply voltage" #when key is
 # a whole directory
 structured-extract pdf/ --keys revenue "net income"
 
-# equivalent, without the console script
-python -m structured_data_extraction.main pdf/1167fc.pdf --keys gain CMRR
 ```
 
 Wrap multi-word keys in quotes. If you omit `--keys`, it prompts for a comma-separated list. A full run writes per-model extractions to `output/<stem>_extraction_<model>.json`, then fuses them into `fused.json` (every fact, sorted by confidence) plus `rating_report.json`, and wraps `fused.json` into the provenance-stamped `records.json`.
 
 A multi-model run then ends by printing the confidence-tier histogram and offering to keep a subset of tiers — pass `--levels` (e.g. `--levels 1.0 0.75`, or `all`) to choose up front, or omit it for an interactive prompt. Single-model runs skip this step, since every record is confidence 1.0.
 
-**Re-run a single stage.** Every step is runnable standalone against the caches in `intermediate/`, which is the fast loop when iterating on prompts:
+**Re-run a single stage.** Every step is also available as its own console script. Run from the same working directory as the full pipeline:
 
 ```bash
-python -m structured_data_extraction.extract --stem 1167fc --keys gain CMRR   # extraction only
-python -m structured_data_extraction.rater                                    # re-score agreement
-python -m structured_data_extraction.records                                  # rebuild records.json
-python -m structured_data_extraction.filter_records --levels 1.0 0.75         # query records by confidence
+# early stages (operate on files from the previous step)
+structured-extract-convert --input pdf/example.pdf        # PDF to markdown
+structured-extract-vocab --input markdown/example.md      # domain vocabulary
+structured-extract-classify --stem example                # section classification
+structured-extract-embed --stem example --keys gain CMRR  # embed sections + keys
+
+# retrieval and extraction
+structured-extract-search --stem example --original-keys gain CMRR  # semantic search
+structured-extract-extract --stem example --keys gain CMRR          # LLM extraction
+
+# post-processing (no --stem flag, they read output dir)
+structured-extract-rate                          # fuse models, score agreement
+structured-extract-records                       # wrap fused.json into records.json
+structured-extract-filter --levels 1.0 0.75     # keep only selected confidence tiers
 ```
 
 Confidence is `models-agreeing / total-models`. `filter_records` reads `records.json` and keeps any subset of the confidence tiers present in the data — pass `--levels` (e.g. `1.0 0.75`, or `all`), or omit it for an interactive menu. Needs more than one model to be meaningful.

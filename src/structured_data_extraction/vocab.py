@@ -22,10 +22,14 @@ def extract_vocab(md_path):
     return cached(inter(md_path.stem, "vocab.json"), build)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Extract domain vocabulary")
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
 
     result = extract_vocab(args.input)
     print(f"Extracted {len(result)} keywords")
+
+
+if __name__ == "__main__":
+    main()

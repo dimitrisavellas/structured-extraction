@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from . import config
+from . import config, matching
 from .paths import inter, read_json, write_json
 
 FUSED = Path(config.OUTPUT_DIR) / "fused.json"
@@ -34,6 +34,7 @@ def make_record(stem, by_key):
                 "embedding": os.environ["EMBEDDING_MODEL"],
             },
             "user_keys": run.get("user_keys", []),
+            "key_mapping": {matching.normalize_key(k): k for k in run.get("user_keys", [])},
         },
         **by_key,
     }
@@ -54,6 +55,10 @@ def write_records(output_dir):
     return out_path, len(envelopes)
 
 
-if __name__ == "__main__":
+def main():
     out_path, n = write_records(config.OUTPUT_DIR)
     print(f"wrote {out_path} ({n} documents)")
+
+
+if __name__ == "__main__":
+    main()

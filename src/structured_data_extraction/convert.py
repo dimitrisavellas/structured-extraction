@@ -134,7 +134,7 @@ def convert_pdf(pdf_path):
         return None
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Convert PDF to Markdown")
     parser.add_argument("--input", required=True, help="Path to PDF file")
     args = parser.parse_args()
@@ -144,3 +144,7 @@ if __name__ == "__main__":
         print(f"Done: {result}")
     else:
         print("Conversion failed.")
+
+
+if __name__ == "__main__":
+    main()

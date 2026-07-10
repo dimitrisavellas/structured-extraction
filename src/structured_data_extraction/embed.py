@@ -191,44 +191,53 @@ def embed_sections_and_keys(stem, user_keys=None, model_name=None):
     out_dir = Path(config.INTERMEDIATE_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    artifacts = [inter(stem, n) for n in ("section_embeddings.npy", "key_embeddings.npy",
-                 "section_texts.json", "key_texts.json", "row_map.json")]
-    if all(p.exists() for p in artifacts) and not config.FORCE:
-        logger.info(f"Skipping embeddings — already exists for {stem}")
+    sec_names = ("section_embeddings.npy", "section_texts.json", "row_map.json")
+    key_names = ("key_embeddings.npy", "key_texts.json")
+    sec_cached = all(inter(stem, n).exists() for n in sec_names) and not config.FORCE
+    key_cached = all(inter(stem, n).exists() for n in key_names) and not config.FORCE
+
+    if sec_cached and key_cached:
+        logger.info(f"Skipping embeddings — already cached for {stem}")
         return
 
     sections = read_json(inter(stem, "sections.json"))
     tables = read_json(inter(stem, "tables.json")) if inter(stem, "tables.json").exists() else []
     vocab = read_json(inter(stem, "vocab.json")) if inter(stem, "vocab.json").exists() else []
 
-    sec_texts, table_by_idx = _build_section_texts(sections, tables)
-    row_texts, row_map = _parse_all_rows(sections, table_by_idx)
-    logger.info(f"Parsed {len(row_map)} table rows")
-
     if user_keys is None:
         user_keys = []
 
-    expanded, originals = _expand_all_keys(user_keys, vocab)
-
     model = _load_model(model_name)
 
-    all_texts = sec_texts + row_texts
-    logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows and {len(expanded)} keys...")
-    # nomic-embed-v1.5 needs task prefixes: documents vs queries. Without them all
-    # cosine sims are depressed and real matches get clipped under the 0.55 gate.
-    all_embs = model.encode([f"search_document: {t}" for t in all_texts],
-                            show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
+    if sec_cached:
+        logger.info(f"Reusing cached section embeddings for {stem}")
+        all_embs = np.load(str(inter(stem, "section_embeddings.npy")))
+        all_texts = read_json(inter(stem, "section_texts.json"))
+        rm = read_json(inter(stem, "row_map.json"))
+        num_sections = rm.get("num_sections", len(sections))
+        row_map = rm.get("rows", [])
+    else:
+        sec_texts, table_by_idx = _build_section_texts(sections, tables)
+        row_texts, row_map = _parse_all_rows(sections, table_by_idx)
+        logger.info(f"Parsed {len(row_map)} table rows")
+        all_texts = sec_texts + row_texts
+        num_sections = len(sec_texts)
+        logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows...")
+        all_embs = model.encode([f"search_document: {t}" for t in all_texts],
+                                show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
+
+    expanded, originals = _expand_all_keys(user_keys, vocab)
+    logger.info(f"Embedding {len(expanded)} keys...")
     key_embs = (model.encode([f"search_query: {k}" for k in expanded],
                              show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
                 if expanded else np.array([]))
 
     _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals,
-                  row_map, len(sec_texts))
+                  row_map, num_sections)
+    logger.info(f"Saved embeddings: {all_embs.shape[0]} content ({num_sections} sections + {len(row_map)} rows), {len(expanded)} keys")
 
-    logger.info(f"Saved combined embeddings: {all_embs.shape[0]} total ({len(sec_texts)} sections + {len(row_map)} rows)")
 
-
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Embed sections and keys")
     parser.add_argument("--stem", required=True)
     parser.add_argument("--keys", nargs="+")
@@ -236,3 +245,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     embed_sections_and_keys(args.stem, user_keys=args.keys, model_name=args.model)
     print("Done")
+
+
+if __name__ == "__main__":
+    main()

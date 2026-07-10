@@ -120,7 +120,7 @@ def classify_sections(pdf_stem):
     return sections
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Classify sections")
     parser.add_argument("--stem", required=True)
     args = parser.parse_args()
@@ -128,3 +128,7 @@ if __name__ == "__main__":
     result = classify_sections(args.stem)
     counts = Counter(s["type"] for s in result)
     print(f"Classified {len(result)} sections: {dict(counts)}")
+
+
+if __name__ == "__main__":
+    main()

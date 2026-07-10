@@ -6,6 +6,7 @@ import time
 from importlib import resources
 from pathlib import Path
 from . import config, records, filter_records, matching, rater
+from .paths import inter, read_json
 from .convert import convert_pdf
 from .vocab import extract_vocab
 from .classify import classify_sections
@@ -16,6 +17,22 @@ from .extract import extract_parallel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
+
+
+def _invalidate_stale_key_caches(stem, user_keys):
+    keys_path = inter(stem, "original_keys.json")
+    if not keys_path.exists():
+        return
+    if sorted(user_keys) == sorted(read_json(keys_path)):
+        return
+    logger.info(f"Keys changed; invalidating key-dependent caches for {stem}")
+    for name in ("key_embeddings.npy", "key_texts.json", "original_keys.json",
+                  "matches.json", "schema.json", "run.json"):
+        p = inter(stem, name)
+        if p.exists():
+            p.unlink()
+    for p in Path(config.OUTPUT_DIR).glob(f"{stem}_extraction_*.json"):
+        p.unlink()
 
 
 def process_single_pdf(pdf_path, user_keys):
@@ -54,6 +71,7 @@ def process_single_pdf(pdf_path, user_keys):
     if tables_file.exists():
         stage("pre-refine", lambda: refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path)))
 
+    _invalidate_stale_key_caches(stem, user_keys)
     stage("embed", lambda: embed_sections_and_keys(stem, user_keys=user_keys))
 
     matches = stage("search", lambda: search(stem, original_keys=user_keys))

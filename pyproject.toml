@@ -22,8 +22,6 @@ dependencies = [
     "sentence-transformers",
     "numpy",
     "pandas",
-    "beautifulsoup4",
-    "lxml",
     "pydantic",
     "instructor",
     "openai",
@@ -31,7 +29,7 @@ dependencies = [
     "scikit-learn==1.8.0",  
     "joblib",
     "pymupdf",
-    "html5lib",
+
     "einops",
     "rapidfuzz",
     "python-dotenv",
@@ -42,6 +40,15 @@ dev = ["pytest"]
 
 [project.scripts]
 structured-extract = "structured_data_extraction.main:main"
+structured-extract-convert = "structured_data_extraction.convert:main"
+structured-extract-vocab = "structured_data_extraction.vocab:main"
+structured-extract-classify = "structured_data_extraction.classify:main"
+structured-extract-embed = "structured_data_extraction.embed:main"
+structured-extract-search = "structured_data_extraction.search:main"
+structured-extract-extract = "structured_data_extraction.extract:main"
+structured-extract-rate = "structured_data_extraction.rater:main"
+structured-extract-records = "structured_data_extraction.records:main"
+structured-extract-filter = "structured_data_extraction.filter_records:main"
 
 [project.urls]
 Repository = "https://gitlab.indiscale.com/caosdb/src/structured-data-extraction"

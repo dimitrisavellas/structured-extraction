@@ -83,7 +83,7 @@ def search(stem, original_keys=None, threshold=None):
     return cached(inter(stem, "matches.json"), build)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Semantic search")
     parser.add_argument("--stem", required=True)
     parser.add_argument("--threshold", type=float)
@@ -91,3 +91,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     result = search(args.stem, original_keys=args.original_keys, threshold=args.threshold)
     print(f"Found matches for {len(result)} keys")
+
+
+if __name__ == "__main__":
+    main()
