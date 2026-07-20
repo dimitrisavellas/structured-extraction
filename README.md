@@ -116,7 +116,46 @@ structured-extract pdf/ --keys revenue "net income"
 
 ```
 
-Wrap multi-word keys in quotes. If you omit `--keys`, it prompts for a comma-separated list. A full run writes per-model extractions to `output/<stem>_extraction_<model>.json`, then fuses them into `fused.json` (every fact, sorted by confidence) plus `rating_report.json`, and wraps `fused.json` into the provenance-stamped `records.json`.
+Wrap multi-word keys in quotes. If you omit `--keys`, it prompts for a comma-separated list.
+
+### Custom schema (skip schema discovery)
+
+Pass `--schema` with a JSON file to bypass the schema-discovery LLM call entirely. The file must contain `document_type` and `schema` keys, using the same format as `intermediate/*_schema.json`. Keys are derived from the schema, so `--keys` is optional.
+
+Use `"fixed"` on any sub-field to constrain the LLM to a single value — the field becomes a `Literal` type in the Pydantic model, so the model can only emit that exact value. This lets you slice a table down to specific variants, grades, or qualifiers:
+
+```bash
+structured-extract pdf/AD840.pdf --schema my_schema.json
+```
+
+```json
+{
+  "document_type": "operational amplifier datasheet",
+  "schema": {
+    "quiescent_current_s_typ": {
+      "type": "list",
+      "description": "Quiescent current typical value for the AD840S variant",
+      "fields": {
+        "differentiator": {
+          "type": "string",
+          "description": "Product variant",
+          "fixed": "AD840S"
+        },
+        "qualifier": {
+          "type": "string",
+          "description": "Column label: min, typ, or max",
+          "fixed": "Typ"
+        },
+        "condition": { "type": "string", "description": "Operating condition" },
+        "value": { "type": "number", "description": "Quiescent current value", "unit": "mA" },
+        "metadata": { "type": "object", "description": "Source and provenance" }
+      }
+    }
+  }
+}
+```
+
+A full run writes per-model extractions to `output/<stem>_extraction_<model>.json`, then fuses them into `fused.json` (every fact, sorted by confidence) plus `rating_report.json`, and wraps `fused.json` into the provenance-stamped `records.json`.
 
 A multi-model run then ends by printing the confidence-tier histogram and offering to keep a subset of tiers — pass `--levels` (e.g. `--levels 1.0 0.75`, or `all`) to choose up front, or omit it for an interactive prompt. Single-model runs skip this step, since every record is confidence 1.0.
 
