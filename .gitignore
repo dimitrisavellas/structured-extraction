@@ -3,6 +3,9 @@
 venv/
 env/
 
+# Local config / secrets
+.env
+
 # Python bytecode
 __pycache__/
 *.py[cod]
@@ -13,12 +16,18 @@ intermediate/
 output/
 markdown/
 
+# Input PDFs and validation set
+pdf/
+validation/
+
 # OS / editor cruft
 .DS_Store
 .idea/
 .vscode/
 
 # Packaging / caches
+dist/
 *.egg-info/
 .pytest_cache/
 
+extras

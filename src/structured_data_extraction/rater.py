@@ -1,0 +1,188 @@
+"""When multiple extraction models run on the same document they produce
+overlapping records. This module clusters those records into "facts" using the
+same-fact equivalence from matching.py, then scores each fact's confidence as
+the fraction of models that found it.
+
+Outputs:
+  - fused.json: every fact, grouped by document and key, sorted by confidence.
+    This is the single complete deliverable that downstream consumers read.
+  - rating_report.json: inter-rater agreement stats (Cohen's kappa and raw
+    agreement percentage for each model pair).
+"""
+from collections import defaultdict
+from pathlib import Path
+from sklearn.metrics import cohen_kappa_score
+from . import config
+from .paths import read_json, write_json
+from .matching import same_fact, _empty, _META_FIELDS, model_slug
+
+
+def _filled_fields(rec):
+    return sum(1 for k, v in rec.items() if k not in _META_FIELDS and not _empty(v))
+
+
+def fuse(records_by_model):
+    pool = [(m, r) for m, recs in records_by_model.items() for r in recs]
+    used = set()
+    clusters = []
+    for i, (model, rec) in enumerate(pool):
+        if i in used:
+            continue
+        used.add(i)
+        cluster = {model: rec}
+        for j in range(i + 1, len(pool)):
+            mj, rj = pool[j]
+            if j in used or mj in cluster:
+                continue
+            if same_fact(rec, rj):
+                used.add(j)
+                cluster[mj] = rj
+        clusters.append(cluster)
+    return clusters
+
+
+def _best_section(records: list[dict]) -> str:
+    """
+    Return the highest-priority section_type found across the records.
+    Priority is table > text > list; an unknown/missing type loses to all of them.
+
+    Arguments:
+    records: A list of records, each a dict that may hold a "metadata" dict
+        with a "section_type" key.
+
+    Returns:
+    The winning section_type as a string ("table", "text", "list", or "unknown").
+    """
+    types = [r.get("metadata", {}).get("section_type", "unknown") for r in records]
+    return min(types, key=lambda t: config.SECTION_TYPE_PRIORITY.get(t, 99))
+
+
+def _fused_metadata(records: list[dict]) -> dict:
+    """
+    Build the metadata for a fused record.
+
+    Arguments
+    records: The records in one cluster, each a dict that may hold a "metadata" dict.
+
+    Returns
+    A metadata dict with "section_type" and "specified" (defaulting to True).
+    """
+    rep = max(records, key=_filled_fields)
+    return {"section_type": _best_section(records),
+            "specified": rep.get("metadata", {}).get("specified", True)}
+
+
+def consensus(cluster, n_models):
+    """Collapse a cluster (model -> record) into one fact: field values taken from the
+    most-filled record, confidence = agreeing models / n_models, the sorted list of agreeing
+    models, and the fused metadata."""
+    recs = list(cluster.values())
+    rep = max(recs, key=_filled_fields)
+    fields = {k: v for k, v in rep.items() if k != "metadata"}
+    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster),
+            **fields, "metadata": _fused_metadata(recs)}
+
+
+def load_outputs():
+    by_file = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    slug_to_model = {model_slug(m): m for m in config.EXTRACTION_MODELS}
+    for path in sorted(Path(config.OUTPUT_DIR).glob("*_extraction_*.json")):
+        stem, _, slug = path.stem.rpartition("_extraction_")
+        model = slug_to_model.get(slug)
+        if model is None:
+            continue
+        data = read_json(path)
+
+        for field, records in data.items():
+            if isinstance(records, list):
+                by_file[stem][field][model].extend(records)
+    return by_file
+
+
+def fuse_outputs(by_file, models):
+    n = len(models)
+    facts = []
+    for stem, fields in sorted(by_file.items()):
+        for field, recs_by_model in sorted(fields.items()):
+            clusters = fuse({m: recs_by_model.get(m, []) for m in models})
+            for c in clusters:
+                facts.append({"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)})
+    return facts
+
+
+def _group_by_doc(facts):
+    grouped = defaultdict(lambda: defaultdict(list))
+    for f in facts:
+        stem = Path(f["source_file"]).stem
+        grouped[stem][f["field"]].append({k: v for k, v in f.items()
+                                          if k not in ("source_file", "field")})
+    # highest-confidence facts first within each key; stable, so ties keep fuse order
+    for fields in grouped.values():
+        for recs in fields.values():
+            recs.sort(key=lambda r: r.get("confidence", 0), reverse=True)
+    return {stem: dict(fields) for stem, fields in grouped.items()}
+
+
+def majority_cutoff(n):
+    return n // 2 + 1
+
+
+def rate(by_file, models=None): 
+    models = config.EXTRACTION_MODELS if models is None else models
+    n = len(models)
+    Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    all_facts = fuse_outputs(by_file, models)
+
+    # fused.json = the end result 
+    fused_path = Path(config.OUTPUT_DIR) / "fused.json"
+    write_json(fused_path, _group_by_doc(all_facts))
+
+    rows = agreement(all_facts, models)
+    report = {
+        "models": models,
+        "facts": len(all_facts),
+        "full_agreement": sum(1 for f in all_facts if len(f["models"]) == n),
+        "agreement": rows,
+        "partial_agreement": [f for f in all_facts if len(f["models"]) < n],
+    }
+    out = Path(config.OUTPUT_DIR) / "rating_report.json"
+    write_json(out, report)
+    _print_agreement(len(all_facts), rows)
+    print(f"\nwrote {out}\nwrote {fused_path}")
+
+
+def agreement(facts, models):
+    if not facts:
+        return []
+    present = {m: [1 if m in f["models"] else 0 for f in facts] for m in models}
+    rows = []
+    for i, a in enumerate(models):
+        for b in models[i + 1:]:
+            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(facts)
+            if len(set(present[a] + present[b])) < 2:
+                # cohen_kappa_score requires at least two label classes; skip if all labels are identical
+                kappa = None
+            else:
+                kappa = round(cohen_kappa_score(present[a], present[b], labels=[0, 1]), 3)
+            rows.append({"raters": [a, b], "kappa": kappa, "agreement": round(agree, 4)})
+    return rows
+
+
+def _print_agreement(n_facts, rows):
+    print(f"\ninter-rater agreement across {n_facts} facts (all files):")
+    for row in rows:
+        a, b = row["raters"]
+        kappa = "n/a" if row["kappa"] is None else row["kappa"]
+        print(f"  {a} <-> {b}: kappa={kappa}, agreement={row['agreement']:.1%}")
+
+
+def main():
+    by_file = load_outputs()
+    if not by_file:
+        print(f"No extraction outputs found in {config.OUTPUT_DIR}")
+        return
+    rate(by_file)
+
+
+if __name__ == "__main__":
+    main()

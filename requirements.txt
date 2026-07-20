@@ -17,3 +17,5 @@ joblib
 pymupdf
 html5lib
 einops
+rapidfuzz
+python-dotenv

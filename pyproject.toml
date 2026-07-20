@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "structured-data-extraction"
+version = "0.1.0"
+description = "Pipeline for extracting structured data (tables, sections, key/value fields) from PDF documents using docling, embeddings, and LLMs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Dimitrios Avellas", email = "dimitrisavellas8@gmail.com" }]
+
+# Mirrors requirements.txt.
+dependencies = [
+    "docling==2.82.0",
+    "docling-core==2.70.2",
+    "docling-parse==5.6.1",
+    "docling-ibm-models==3.13.0",
+    "yake",
+    "sentence-transformers",
+    "numpy",
+    "pandas",
+    "pydantic",
+    "instructor",
+    "openai",
+    "jinja2",
+    "scikit-learn==1.8.0",  
+    "joblib",
+    "pymupdf",
+
+    "einops",
+    "rapidfuzz",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+structured-extract = "structured_data_extraction.main:main"
+structured-extract-convert = "structured_data_extraction.convert:main"
+structured-extract-vocab = "structured_data_extraction.vocab:main"
+structured-extract-classify = "structured_data_extraction.classify:main"
+structured-extract-embed = "structured_data_extraction.embed:main"
+structured-extract-search = "structured_data_extraction.search:main"
+structured-extract-extract = "structured_data_extraction.extract:main"
+structured-extract-rate = "structured_data_extraction.rater:main"
+structured-extract-records = "structured_data_extraction.records:main"
+structured-extract-filter = "structured_data_extraction.filter_records:main"
+
+[project.urls]
+Repository = "https://gitlab.indiscale.com/caosdb/src/structured-data-extraction"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.setuptools.package-data]
+structured_data_extraction = ["templates/*.j2", "models/section_classifier/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,51 @@
+You are a document extraction specialist. Extract ALL value variants for each requested key from the document sections below.
+
+## Document Type
+{{ document_type }}
+
+## Source File
+{{ source_file }}
+
+## Domain Vocabulary
+{{ vocab_terms }}
+
+## Extraction Schema
+{{ schema }}
+
+## Requested Keys
+{{ user_keys }}
+
+## Relevant Document Sections
+
+{{ section_content }}
+
+---
+
+## Instructions
+
+For each field in the schema above, extract ALL value variants found in the document sections. Produce a JSON object where each schema field name maps to a list of records.
+
+The structure of each record is defined by the **fields** property in the schema for that field. Follow that structure exactly — do NOT add extra sub-fields or omit required ones.
+
+When a schema sub-field has a **unit** property, a companion `{field_name}_unit` sub-field will be present in the output structure. Fill it with the unit value from the schema (or from the document if it differs). For example, if the schema defines `smw: {type: "number", unit: "cm³ cm⁻³"}`, the output record will have both `smw` (the value) and `smw_unit` (the unit string).
+
+Every record must include a `metadata` object with:
+- **source**: "{{ source_file }}"
+- **section_type**: type of section (e.g., "table", "list", "text")
+- **specified**: true if explicitly stated, false if inferred
+
+## Rules
+1. Extract EVERY occurrence — a key may appear in multiple tables under different categories, conditions, or columns. Each variant gets its own record.
+2. Match synonyms using the domain vocabulary and schema descriptions.
+3. **One record per category.** If a value applies to multiple distinct categories (e.g., different grades, models, segments, periods), create a SEPARATE record for each. NEVER combine distinct categories into a single field (e.g., do not write "GradeA, GradeB" — create two records).
+4. Use exact values from the document. Do not infer or fabricate.
+5. If a key is not found, produce an empty list for that field.
+6. When a value comes from a labeled table column (e.g., [Min], [Typ], [Max]), use that label in the appropriate sub-field for that field's structure.
+7. **Row-label match required, plus sub-rows that refine it**: Only extract values from rows whose parameter name or column header directly matches the schema field (or a true synonym). Additionally, rows that *immediately follow* a matched parameter row and describe a refinement of it (e.g., a row labeled "Over Temperature" or "Average TC" sitting right under "Input Bias Current") DO belong to that matched parameter — extract them as separate records. For such a sub-row, set `condition` to the sub-row label combined with the Test Conditions/Comments cell when both are present (e.g., `condition = "Over Temperature, T_A = -40°C to +85°C"`); keep `qualifier` as the column label (Min/Typ/Max); keep `category` as the grade/group from the column header. Stop as soon as the next row names a different parameter ("Input X" vs "Output X" are separate fields — never cross that boundary).
+8. **Use the surrounding section heading for category when the table lost it**: If a table is prefixed with a "Surrounding section heading: …" line  and the column headers no longer carry a grade/category label, use that heading as the `category` for rows extracted from that table. Do this only when the column header is missing the label — never override an explicit column label.
+9. **Variant/differentiator columns**: When the schema defines a field that identifies the column-group variant (e.g. named "differentiator", "variant", "series", or "grade"), set it to the header of the column group the value sits under — a part number (e.g. "LT1167AI/LT1167AI-1"), product grade, fiscal period, or segment. Emit a SEPARATE record for every variant group, even when the parameter, condition, and qualifier are identical across groups (only the value and the differentiator change).
+10. **Value fields must contain only the bare measured value.** Strip all surrounding words, labels, and narration — no units, no method/location qualifiers (e.g. `"7"` not `"7mL/well"`, `"-20"` not `"-20C shared freezer"`). Units belong exclusively in the companion `*_unit` sub-field; contextual narration belongs in `condition` or nowhere.
+11. **Fill every defined sub-field that the source supports.** If the document provides information for a sub-field the schema defines, populate it — do not leave it blank. An empty string is only acceptable when the information is genuinely absent from the source text.
+12. **No placeholder records.** Only emit a record for an occurrence the document actually gives a value for. If an entity or parameter is merely named again without its own stated quantity (e.g. mentioned in a processing/dilution step that gives no number), do NOT create a record for it, and do NOT backfill the value sub-field with `0` or an empty string as a stand-in. Every record must carry at least one real value taken from the document — a genuine `0` read from the source is fine, but never fabricate `0`/empty just to satisfy the structure.
+
+Respond with a JSON object matching the schema structure.
