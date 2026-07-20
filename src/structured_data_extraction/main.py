@@ -49,7 +49,7 @@ def _invalidate_stale_key_caches(stem, user_keys):
         p.unlink()
 
 
-def process_single_pdf(pdf_path, user_keys):
+def process_single_pdf(pdf_path, user_keys, user_schema=None):
     """Run the full extraction pipeline on one PDF.
 
     Executes every stage in order: convert → vocab → classify → tables →
@@ -150,7 +150,7 @@ def process_single_pdf(pdf_path, user_keys):
             refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path))
 
     with timed("extract"):
-        results = extract_parallel(stem, user_keys)
+        results = extract_parallel(stem, user_keys, user_schema=user_schema)
 
     _log_run_summary(stem, timings, results, matches)
     logger.info(f"=== Done with {pdf_path.name} ===")
@@ -233,7 +233,7 @@ def _offer_filter(records_path, levels):
     filter_records.run(records_path, levels=levels)
 
 
-def process_batch(pdf_dir, user_keys):
+def process_batch(pdf_dir, user_keys, user_schema=None):
     pdf_dir = Path(pdf_dir)
     if not pdf_dir.exists():
         logger.error(f"Directory not found: {pdf_dir}")
@@ -248,7 +248,7 @@ def process_batch(pdf_dir, user_keys):
     results = []
     for pdf in pdfs:
         try:
-            result = process_single_pdf(str(pdf), user_keys)
+            result = process_single_pdf(str(pdf), user_keys, user_schema=user_schema)
             if result:
                 results.append(result)
         except Exception as e:
@@ -280,6 +280,9 @@ def main():
     parser.add_argument("--levels", nargs="+", metavar="LVL",
                         help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
                              "omit to be prompted after extraction")
+    parser.add_argument("--schema", metavar="FILE",
+                        help="Path to a JSON schema file (same format as intermediate/*_schema.json); "
+                             "skips schema discovery. Keys are derived from the schema, so --keys is optional")
     parser.add_argument("--dump-templates", metavar="DIR",
                         help="Write the built-in prompt templates to DIR for editing, then exit; "
                              "point TEMPLATES_DIR at that folder to use your edits")
@@ -293,8 +296,22 @@ def main():
         parser.error("a PDF file or directory is required (unless using --dump-templates)")
 
     config.FORCE = args.force
+
+    user_schema = None
+    if args.schema:
+        schema_path = Path(args.schema)
+        if not schema_path.exists():
+            print(f"Schema file not found: {schema_path}")
+            sys.exit(1)
+        user_schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        if not isinstance(user_schema, dict) or "schema" not in user_schema or "document_type" not in user_schema:
+            print("Schema file must contain 'document_type' and 'schema' keys")
+            sys.exit(1)
+
     user_keys = args.keys
-    if not user_keys:
+    if not user_keys and user_schema:
+        user_keys = list(user_schema["schema"].keys())
+    elif not user_keys:
         print("Enter keys to extract (comma-separated):")
         raw = input("> ").strip()
         user_keys = [k.strip() for k in raw.split(",") if k.strip()]
@@ -308,7 +325,7 @@ def main():
     config.OUTPUT_DIR = args.output
 
     if Path(args.path).is_dir():
-        results = process_batch(args.path, user_keys)
+        results = process_batch(args.path, user_keys, user_schema=user_schema)
         if results:
             finalize_outputs(args.levels)
         print(f"Extracted from {len(results)} files → {config.OUTPUT_DIR}")
@@ -316,7 +333,7 @@ def main():
             print("No documents produced any extraction.")
             sys.exit(1)
     else:
-        result = process_single_pdf(args.path, user_keys)
+        result = process_single_pdf(args.path, user_keys, user_schema=user_schema)
         if result:
             finalize_outputs(args.levels)
             print(json.dumps(result, indent=2, ensure_ascii=False))  #document them well

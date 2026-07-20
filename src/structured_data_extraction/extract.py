@@ -23,13 +23,13 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 import instructor
 from jinja2 import Environment, ChoiceLoader, FileSystemLoader, PackageLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
 from . import config, matching
-from .paths import inter, read_json, cached
+from .paths import inter, read_json, write_json, cached
 from .tables import strip_code_fence
 
 logger = logging.getLogger(__name__)
@@ -110,10 +110,15 @@ def _build_extraction_model(schema, user_keys):
         for sub_name, sub_def in fields_spec.items():
             if sub_name == "metadata":
                 continue
-            field_type = type_map.get(sub_def.get("type", "string"), str)
             sub_desc = sub_def.get("description", "")
-            default = "" if field_type is str else None
-            sub_fields[sub_name] = (field_type, Field(default=default, description=sub_desc))
+            fixed = sub_def.get("fixed")
+            if fixed is not None:
+                field_type = Literal[fixed]
+                sub_fields[sub_name] = (field_type, Field(default=fixed, description=sub_desc))
+            else:
+                field_type = type_map.get(sub_def.get("type", "string"), str)
+                default = "" if field_type is str else None
+                sub_fields[sub_name] = (field_type, Field(default=default, description=sub_desc))
             if sub_def.get("unit") and not has_unit_field:
                 sub_fields[f"{sub_name}_unit"] = (str, Field(default="", description=f"Unit for {sub_name}"))
 
@@ -368,7 +373,7 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
     return extraction
 
 
-def extract_parallel(stem, user_keys):
+def extract_parallel(stem, user_keys, user_schema=None):
     """Run every configured extraction model over one document in parallel.
 
     Stamps run provenance (run.json), discovers the schema once for all models, then fans
@@ -387,11 +392,15 @@ def extract_parallel(stem, user_keys):
 
     md_text, vocab, unique = _prepare_sections(stem)
 
-    # schema discovery once for all models — cached to intermediate/<stem>_schema.json
-    disc = cached(inter(stem, "schema.json"),
-                  lambda: dict(zip(("document_type", "schema"),
-                                   discover_schema(md_text, unique, vocab, user_keys))))
-    doc_type, schema = disc["document_type"], disc["schema"]
+    if user_schema is not None:
+        doc_type, schema = user_schema["document_type"], user_schema["schema"]
+        write_json(inter(stem, "schema.json"), user_schema)
+        logger.info("Using user-supplied schema (skipped schema discovery)")
+    else:
+        disc = cached(inter(stem, "schema.json"),
+                      lambda: dict(zip(("document_type", "schema"),
+                                       discover_schema(md_text, unique, vocab, user_keys))))
+        doc_type, schema = disc["document_type"], disc["schema"]
     logger.info(f"Schema: document_type='{doc_type}'")
 
     results = []
