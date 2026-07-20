@@ -6,8 +6,6 @@ yake
 sentence-transformers
 numpy
 pandas
-beautifulsoup4
-lxml
 pydantic
 instructor
 openai
@@ -15,7 +13,6 @@ jinja2
 scikit-learn==1.8.0  
 joblib
 pymupdf
-html5lib
 einops
 rapidfuzz
 python-dotenv
