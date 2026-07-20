@@ -1,3 +1,17 @@
+"""Feature engineering for the section classifier.
+
+Builds the feature matrix that the RandomForest in classify.py consumes.
+Each item becomes a row of:
+  - word-level TF-IDF features (fitted at training time, transformed at inference)
+  - character n-gram TF-IDF features (same)
+  - 30 hand-crafted regex/layout features (pipe presence, bullet patterns, heading
+    depth, digit density, sentence count, etc.)
+  - one-hot context: the Docling labels of the item itself, its predecessor, and
+    its successor, plus the distance to the nearest preceding section header
+
+The regex feature vector length and order are fixed by the trained model — adding,
+removing, or reordering features requires retraining.
+"""
 import re
 import numpy as np
 from scipy import sparse

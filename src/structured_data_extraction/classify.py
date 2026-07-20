@@ -1,3 +1,17 @@
+"""Section classifier : re-labels Docling items with a supervised RandomForest.
+
+Docling's built-in labels are unreliable on dense datasheets: multi-sentence
+captions get tagged as "text", and sub-headers are often labelled "list_item".
+A small RandomForest (trained on hand-labelled datasheet items) predicts a corrected section type for every item.
+
+The classifier uses TF-IDF features (word- and character-level), 30 hand-crafted
+layout/typography features from features.py, and one-hot context from the
+surrounding Docling labels. Its output — sections.json — is the canonical
+content stream that every downstream step (embedding, search, extraction) reads.
+
+The trained model (~89 MB: one joblib per vectoriser plus the forest) ships
+inside the package under models/section_classifier/.
+"""
 import argparse
 import json
 import logging

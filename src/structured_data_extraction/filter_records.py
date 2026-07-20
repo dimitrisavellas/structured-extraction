@@ -1,3 +1,15 @@
+"""Filter extracted records by consensus confidence tier.
+
+After multi-model extraction and rating, each record carries a confidence score
+(fraction of models that agreed on it). This module lets the user keep only the
+tiers they trust — e.g. only records all models agreed on (1.0), or everything
+above majority (>= 0.67).
+
+Usable both as a CLI tool (structured-filter-records) and programmatically from
+the pipeline's end-of-run step. When no --levels are given, an interactive menu
+lets the user pick tiers; with a single extraction model every record is
+confidence 1.0, so the filter is a no-op.
+"""
 import argparse
 import json
 from collections import Counter

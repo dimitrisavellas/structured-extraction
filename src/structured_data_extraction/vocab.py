@@ -1,3 +1,15 @@
+"""Domain vocabulary extraction via YAKE.
+
+Runs unsupervised keyword extraction on the document's Markdown text to surface
+domain-specific terms (e.g. "supply voltage", "output impedance"). The resulting
+vocab list is used in embed.py to expand user keys with related terms before
+embedding, improving recall when the user's key wording doesn't exactly match
+the document's phrasing.
+
+YAKE was chosen because it is unsupervised (no training corpus needed), fast,
+and works well on technical English. The top-N and max n-gram size are
+configurable via VOCAB_TOP_N and VOCAB_MAX_NGRAM in .env.
+"""
 import argparse
 import logging
 from pathlib import Path

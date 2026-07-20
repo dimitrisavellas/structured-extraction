@@ -1,3 +1,16 @@
+"""Semantic search : match user keys to document sections and table rows.
+
+Computes cosine similarity between the key embeddings and the section/row
+embeddings produced by embed.py, then returns the top-K hits above
+SIMILARITY_THRESHOLD for each key.
+
+The embedding matrix has sections first, then rows; a hit index
+>= num_sections is a row-level match and carries the originating section_idx,
+row_text, and group_header so downstream extraction knows which table and row
+the hit came from.
+
+Results are cached to matches.json and reused on reruns unless --force is set.
+"""
 import argparse
 import logging
 import numpy as np

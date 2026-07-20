@@ -1,3 +1,20 @@
+"""Same-fact equivalence and field comparison.
+
+Decides whether two extracted records describe the same real-world fact so that
+rater.py can cluster them for consensus scoring. The rule: two records match
+when every non-metadata field either agrees or is empty on at least one side
+(empty = wildcard, so a sparse record still matches a fuller one).
+
+Numeric fields must match exactly (after float parsing). Unit fields match after
+Unicode/dash normalisation and synonym expansion (e.g. "millimeters" == "mm").
+Descriptor text (conditions, qualifiers) uses a rapidfuzz token-set similarity
+threshold of 85 — fuzzy because models phrase conditions differently
+("TA = −40°C" vs "T_A = -40°C"), but exact on the number so distinct specs are
+never merged.
+
+Also provides normalize_key (user key → valid Pydantic field name) and
+validate_keys (trust-boundary cleaning of user input).
+"""
 import logging
 import re
 import unicodedata

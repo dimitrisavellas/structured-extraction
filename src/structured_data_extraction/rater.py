@@ -1,3 +1,14 @@
+"""When multiple extraction models run on the same document they produce
+overlapping records. This module clusters those records into "facts" using the
+same-fact equivalence from matching.py, then scores each fact's confidence as
+the fraction of models that found it.
+
+Outputs:
+  - fused.json: every fact, grouped by document and key, sorted by confidence.
+    This is the single complete deliverable that downstream consumers read.
+  - rating_report.json: inter-rater agreement stats (Cohen's kappa and raw
+    agreement percentage for each model pair).
+"""
 from collections import defaultdict
 from pathlib import Path
 from sklearn.metrics import cohen_kappa_score

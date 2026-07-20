@@ -1,3 +1,18 @@
+"""PDF-to-structured-items conversion via Docling.
+
+Converts a PDF into two artifacts: a full-document Markdown file and a
+per-item JSON list (_items.json) where each item carries its Docling label,
+text, page number, and bounding box.
+
+OCR is disabled because the target documents are born-digital; Docling's table
+structure model runs in FAST mode (roughly 2x faster than ACCURATE) because the
+downstream vision-refinement step in tables.py re-reads complex tables anyway,
+so the speed/accuracy trade-off favours throughput here.
+
+Bounding boxes are stored in Docling's native BOTTOMLEFT coordinate origin.
+Any consumer that needs top-left origin (e.g. PyMuPDF rendering in tables.py)
+converts on read.
+"""
 import argparse
 import json
 import logging

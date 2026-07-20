@@ -1,3 +1,26 @@
+"""Table complexity scoring and vision-based refinement.
+
+Docling's table parser sometimes garbles complex tables: merged cells get lost,
+columns misalign, and symbol-heavy rows (units, ±, subscripts) collapse into
+nonsense. This module scores each table's structural complexity and, for tables
+above VISION_COMPLEXITY_THRESHOLD, sends the original PDF crop to a vision-
+capable LLM to reconstruct clean HTML.
+
+Two refinement passes exist:
+  1. Pre-embed (refine_symbol_only_tables) — tables whose cells are almost
+     entirely symbols (word-cell ratio < 10%) are refined *before* embedding.
+     Without real words their embeddings would be meaningless and search could
+     never retrieve them.
+  2. Post-search (refine_matched_tables) — tables that search actually matched
+     are refined lazily, so the LLM cost is paid only for tables the user's
+     keys care about.
+
+The complexity score combines sparsity, ragged column counts, vertical merges,
+hierarchy (group-header rows), table width, and HTML keywords. Vision refinement
+renders the PDF bounding box via PyMuPDF, sends the image to the vision model,
+and expands any remaining rowspan/colspan into flat repeated cells so downstream
+extraction sees a regular grid.
+"""
 import base64
 import concurrent.futures
 import json

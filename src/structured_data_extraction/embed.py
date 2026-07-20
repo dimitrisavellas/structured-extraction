@@ -1,3 +1,22 @@
+"""Embedding of document sections, table rows, and user keys.
+
+Encodes every section and individual table row into dense vectors with a
+SentenceTransformer model (default: nomic-embed-text-v1.5), then encodes the
+user's extraction keys into the same space so search.py can match them via
+cosine similarity.
+
+nomic requires task-type prefixes: sections are prefixed with "search_document:"
+and keys with "search_query:". Without these prefixes similarity scores collapse
+and SIMILARITY_THRESHOLD stops discriminating relevant from irrelevant hits.
+
+Sections are stacked before rows in the embedding matrix, search.py relies on
+that ordering to tell section-level hits from row-level hits using num_sections
+as the boundary index.
+
+Table rows are parsed into per-row text (with group headers prepended) so that
+search can match an individual parameter row inside a large table rather than
+only matching the table as a whole.
+"""
 import argparse
 import json
 import logging
@@ -12,7 +31,7 @@ from .paths import inter, read_json, write_json
 logger = logging.getLogger(__name__)
 
 
-EMBED_BATCH_SIZE = int(os.environ["EMBED_BATCH_SIZE"])
+EMBED_BATCH_SIZE = int(os.environ.get("EMBED_BATCH_SIZE", 4))
 
 _model_cache = {}
 

@@ -1,3 +1,21 @@
+"""LLM-based structured extraction : schema discovery and value extraction.
+
+1. Schema discovery: a single LLM call (SCHEMA_MODEL) examines the matched
+   sections and the user's keys, and returns a per-key field specification
+   (sub-fields, types, units) plus a document_type label. The spec is used to
+   build a Pydantic model on the fly so the extraction LLM's output is
+   validated and typed automatically via the Instructor library.
+
+2. Parallel extraction: every model listed in EXTRACTION_MODELS extracts values
+   independently, each through Instructor with retries. Running multiple models
+   produces overlapping records whose agreement is later scored by rater.py;
+   with a single model the extraction still works, just without a consensus
+   signal.
+
+Prompt templates (schema_discovery.j2 and extraction.j2) are Jinja files that
+ship inside the package. Users can override them by running
+`--dump-templates ./dir` and setting TEMPLATES_DIR to that directory.
+"""
 import argparse
 import json
 import logging

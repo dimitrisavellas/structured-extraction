@@ -1,8 +1,22 @@
+"""Pipeline orchestrator : drives the full extraction workflow end to end.
+
+Processes one PDF or a directory of PDFs through every stage in order:
+  convert → vocab → classify → tables → embed → search → extract → rate → records
+
+Each stage writes its output to intermediate/ or output/ and is skipped on rerun
+if the artefact already exists (unless --force is set). Key-dependent caches
+(embeddings, matches, extractions) are automatically invalidated when the user
+changes their key list between runs.
+
+After extraction, finalize_outputs() fuses the per-model results via rater.py,
+writes provenance records, and optionally filters by confidence tier.
+"""
 import argparse
 import json
 import logging
 import sys
 import time
+from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
 from . import config, records, filter_records, matching, rater
@@ -36,6 +50,45 @@ def _invalidate_stale_key_caches(stem, user_keys):
 
 
 def process_single_pdf(pdf_path, user_keys):
+    """Run the full extraction pipeline on one PDF.
+
+    Executes every stage in order: convert → vocab → classify → tables →
+    embed → search → extract, writing intermediate artefacts to
+    INTERMEDIATE_DIR and per-model extractions to OUTPUT_DIR. Each stage is
+    skipped when its output already exists on disk (unless --force is set).
+    If the user's key list has changed since the last run, key-dependent
+    caches are automatically invalidated.
+
+    Args:
+        pdf_path: Path to the input PDF (str or Path).
+        user_keys: List of extraction keys, e.g. ["gain bandwidth", "PSRR"].
+                   Cleaned and validated internally (whitespace, quotes, and
+                   duplicates are handled; raises ValueError on unusable input).
+
+    Returns:
+        A list of dicts on success — one dict per extraction model. Each dict
+        maps a normalised field name to a list of extracted records::
+
+            [
+                {                                       # model 1
+                    "gain_bandwidth": [
+                        {"qualifier": "...", "condition": "...",
+                         "value": 4.0, "unit": "MHz",
+                         "metadata": {"source": "...", "section_type": "table",
+                                      "specified": True, "document_type": "...",
+                                      "model": "gemma4:31b-cloud"}},
+                        ...
+                    ],
+                    ...
+                },
+                { ... },                                # model 2
+            ]
+
+        Returns None if the PDF cannot be found or conversion fails.
+
+        These per-model dicts are the raw, un-fused extractions. To get the
+        final confidence-scored output, call finalize_outputs().
+    """
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         logger.error(f"PDF not found: {pdf_path}")
@@ -50,31 +103,39 @@ def process_single_pdf(pdf_path, user_keys):
 
     timings = {}
 
-    def stage(label, fn):
+    @contextmanager
+    def timed(label):
         t0 = time.perf_counter()
         try:
-            return fn()
+            yield
         finally:
             timings[label] = timings.get(label, 0.0) + time.perf_counter() - t0
 
-    md_path = stage("convert", lambda: convert_pdf(str(pdf_path)))
+    with timed("convert"):
+        md_path = convert_pdf(str(pdf_path))
     if md_path is None:
         logger.error(f"Conversion failed for {pdf_path.name}")
         return None
 
-    stage("vocab", lambda: extract_vocab(md_path))
-    stage("classify", lambda: classify_sections(stem))
-    stage("tables", lambda: process_tables(str(sections_path)))
+    with timed("vocab"):
+        extract_vocab(md_path)
+    with timed("classify"):
+        classify_sections(stem)
+    with timed("tables"):
+        process_tables(str(sections_path))
 
     # tables Docling stripped to bare symbols can't be retrieved, so they'd never reach the
     # lazy-vision step below; de-garble them now so their recovered text gets embedded
     if tables_file.exists():
-        stage("pre-refine", lambda: refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path)))
+        with timed("pre-refine"):
+            refine_symbol_only_tables(str(tables_file), pdf_path=str(pdf_path))
 
     _invalidate_stale_key_caches(stem, user_keys)
-    stage("embed", lambda: embed_sections_and_keys(stem, user_keys=user_keys))
+    with timed("embed"):
+        embed_sections_and_keys(stem, user_keys=user_keys)
 
-    matches = stage("search", lambda: search(stem, original_keys=user_keys))
+    with timed("search"):
+        matches = search(stem, original_keys=user_keys)
 
     # refine matched complex tables with vision model
     matched_idxs = {
@@ -85,9 +146,11 @@ def process_single_pdf(pdf_path, user_keys):
 
     if matched_idxs and tables_file.exists():
         logger.info("Refining matched complex tables...")
-        stage("refine", lambda: refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path)))
+        with timed("refine"):
+            refine_matched_tables(str(tables_file), matched_idxs, pdf_path=str(pdf_path))
 
-    results = stage("extract", lambda: extract_parallel(stem, user_keys))
+    with timed("extract"):
+        results = extract_parallel(stem, user_keys)
 
     _log_run_summary(stem, timings, results, matches)
     logger.info(f"=== Done with {pdf_path.name} ===")
@@ -116,10 +179,40 @@ def _log_run_summary(stem, timings, results, matches):
 
 
 def finalize_outputs(levels=None):
-    """Fuse the per-model extractions into fused.json, agreement stats, and provenance records.
+    """Fuse per-model extractions into the final deliverables.
 
-    Reads every extraction.json in the output dir, so it works for one model or many
-    (a single model just passes through with confidence 1.0 and no agreement rows).
+    Reads every output/<stem>_extraction_<model>.json written by extract_parallel,
+    clusters matching records across models into facts, and writes three files to
+    OUTPUT_DIR:
+
+      fused.json
+        The primary output. Structure: {stem: {field: [fact, ...]}}.
+        Each fact is a dict with the extracted fields (value, unit, qualifier,
+        condition, ...) plus:
+          - "confidence": float in (0, 1] — fraction of configured models that
+            independently produced this fact (e.g. 2 of 3 → 0.67). With a single
+            model every fact is 1.0.
+          - "models": list[str] — which models agreed on this fact.
+          - "metadata": {"section_type": str, "specified": bool}.
+        Facts are sorted highest-confidence first within each field.
+
+      rating_report.json
+        Inter-model agreement statistics: total fact count, full-agreement count,
+        pairwise Cohen's kappa and raw agreement for each model pair, and the list
+        of facts where models disagreed. Useful for auditing model consistency.
+
+      records.json
+        Provenance-stamped envelopes wrapping fused.json: one entry per document,
+        adding source_file, document_type, the models used, and the user's
+        original keys. This is the archival output.
+
+    After writing, if multiple extraction models are configured, the user is
+    offered (or given, via `levels`) a confidence filter to keep only trusted
+    tiers.
+
+    Args:
+        levels: Confidence tiers to keep (e.g. [1.0, 0.75]) or ["all"].
+                None triggers an interactive prompt (multi-model only).
     """
     by_file = rater.load_outputs()
     if not by_file:

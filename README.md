@@ -49,14 +49,7 @@ Supporting: `matching.py` (same-fact equivalence), `features.py` (classifier fea
 
 ## Design notes
 
-Non-obvious design choices explained per file:
-
-- **Convert (`convert.py`).** OCR is off and Docling's table model runs in `FAST` mode, roughly 2× faster. Turn OCR on for scanned documents(never really tested). Bounding boxes are translated from Docling's bottom-left origin to the top-left origin PyMuPDF uses later, so the two agree on where a table sits when it gets re-rendered.
-- **Classify (`classify.py`).** A small supervised RandomForest re-labels items rather than trusting Docling's own labels, which mislabel multi-sentence captions and sub-headers. Its output, `sections.json`, is the canonical content stream every later step reads.
-- **Tables (`tables.py`), symbol-only recovery.** Complex tables that Docling stripped down to bare symbols are rebuilt *before* embedding, not after. Those rows carry no words, so search could never retrieve them — meaning they'd never reach the lazy-vision refinement step either. De-garbling them up front gets their recovered text into the embeddings so they can match at all.
-- **Embed (`embed.py`), task prefixes.** nomic needs `search_document:` / `search_query:` prefixes; without them the similarities collapse toward each other and `SIMILARITY_THRESHOLD` stops discriminating. Sections are stacked before rows in the matrix and `search.py` relies on that ordering.
-- **Matching (`matching.py`).** Two records describe the same fact when their number and unit match exactly (after Unicode/dash normalisation) and their descriptor text clears a rapidfuzz similarity of 85 — fuzzy on the wording because models phrase conditions differently (`TA = −40°C` vs `T_A = -40°C`), exact on the number. Empty fields act as wildcards, so a sparse record still matches a fuller one.
-- **Prompts.** The two LLM prompts are Jinja templates that ship inside the package — `schema_discovery.j2` (asks for each key's field shape and the document type) and `extraction.j2` (the actual value extraction). To tune them, run `structured-extract --dump-templates ./my-templates` for an editable copy, edit it, and set `TEMPLATES_DIR=./my-templates`. Overrides are per-file: change just `extraction.j2` and the other still loads its packaged default. No code change needed.
+Each Python file has a module-level docstring explaining what it does and the non-obvious design decisions behind it. Start with the docstring at the top of the file you want to understand.
 
 ## Installation
 

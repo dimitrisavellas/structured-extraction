@@ -1,3 +1,14 @@
+"""Global configuration: directory layout, device selection, and tuning knobs.
+
+Directory paths default to subdirectories of the
+working directory (pdf/, markdown/, intermediate/, output/).
+
+The embedding device is auto-detected: CUDA if available, then MPS (Apple
+Silicon), then CPU. Override with EMBEDDING_DEVICE in .env.
+
+Tuning constants (similarity threshold, search top-K, vision complexity
+threshold, etc.) have sensible defaults but can be overridden per-run in .env.
+"""
 import os
 from pathlib import Path
 from importlib import resources
