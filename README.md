@@ -108,6 +108,7 @@ Notes:
 ## Usage
 
 ```bash
+CLI:
 # one PDF
 structured-extract pdf/1167fc.pdf --keys gain CMRR "supply voltage" #when key is more than one word then it should be inside ""
 
@@ -117,9 +118,9 @@ structured-extract pdf/ --keys revenue "net income"
 ```
 
 ```python file
-
+Script:
 from pathlib import Path
-from structured_data_extraction.main import process_single_pdf, finalize_outputs
+from structured_data_extraction.main import process_single_pdf, process_batch, finalize_outputs
 
 path = Path("pdf/example.pdf")
 # OR dir = Path("pdf_dir")
