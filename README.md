@@ -116,6 +116,26 @@ structured-extract pdf/ --keys revenue "net income"
 
 ```
 
+```python file
+
+from pathlib import Path
+from structured_data_extraction.main import process_single_pdf, finalize_outputs
+
+path = Path("pdf/example.pdf")
+# OR dir = Path("pdf_dir")
+keys = ["key_1", "key_2", "key_3"]
+
+results = process_single_pdf(path, keys)
+# OR process_batch(pdf_dir, user_keys)
+
+
+
+finalize_outputs(levels=["all"])
+
+print("Done. See output/fused.json and output/records.json")
+```
+
+
 Wrap multi-word keys in quotes. If you omit `--keys`, it prompts for a comma-separated list. A full run writes per-model extractions to `output/<stem>_extraction_<model>.json`, then fuses them into `fused.json` (every fact, sorted by confidence) plus `rating_report.json`, and wraps `fused.json` into the provenance-stamped `records.json`.
 
 A multi-model run then ends by printing the confidence-tier histogram and offering to keep a subset of tiers — pass `--levels` (e.g. `--levels 1.0 0.75`, or `all`) to choose up front, or omit it for an interactive prompt. Single-model runs skip this step, since every record is confidence 1.0.
