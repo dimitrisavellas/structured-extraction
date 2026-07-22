@@ -108,12 +108,32 @@ Notes:
 ## Usage
 
 ```bash
+CLI:
 # one PDF
 structured-extract pdf/1167fc.pdf --keys gain CMRR "supply voltage" #when key is more than one word then it should be inside ""
 
 # a whole directory
 structured-extract pdf/ --keys revenue "net income"
 
+```
+
+```python file
+Script:
+from pathlib import Path
+from structured_data_extraction.main import process_single_pdf, process_batch, finalize_outputs
+
+path = Path("pdf/example.pdf")
+# OR dir = Path("pdf_dir")
+keys = ["key_1", "key_2", "key_3"]
+
+results = process_single_pdf(path, keys)
+# OR process_batch(pdf_dir, user_keys)
+
+
+
+finalize_outputs(levels=["all"])
+
+print("Done. See output/fused.json and output/records.json")
 ```
 
 Wrap multi-word keys in quotes. If you omit `--keys`, it prompts for a comma-separated list.
