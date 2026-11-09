@@ -1,5 +1,7 @@
 # Structured Data Extraction
 
+[![PyPI](https://img.shields.io/pypi/v/structured-data-extraction)](https://pypi.org/project/structured-data-extraction/)
+
 Pull user-specified fields out of arbitrary PDFs and return them as structured JSON with provenance.
 
 It's **domain-agnostic**: nothing domain-specific is checked in. The vocabulary, acronyms, and field shapes are all derived from each document at runtime, so the same pipeline handles a chip datasheet or an earnings report without changes.
