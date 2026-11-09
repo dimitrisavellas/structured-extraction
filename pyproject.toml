@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "structured-data-extraction"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pipeline for extracting structured data (tables, sections, key/value fields) from PDF documents using docling, embeddings, and LLMs."
 readme = "README.md"
 requires-python = ">=3.11"
