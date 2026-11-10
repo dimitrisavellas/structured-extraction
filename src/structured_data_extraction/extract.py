@@ -62,7 +62,8 @@ _raw = None
 def _raw_client():
     global _raw
     if _raw is None:
-        _raw = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
+        _raw = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"],
+                      timeout=config.LLM_TIMEOUT)
     return _raw
 
 
@@ -195,6 +196,7 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
         model=os.environ["SCHEMA_MODEL"],
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
+        **config.LLM_EXTRA,
     )
     raw = strip_code_fence(resp.choices[0].message.content.strip())
 
@@ -213,7 +215,23 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
 def extract_values(client, matched_sections, vocab, user_keys, schema,
                    document_type="unknown", source_file="", model=None):
     """Run one extraction LLM through Instructor and return {field: [record dicts]}.
-    Retries up to MAX_LLM_RETRIES; returns {} if every attempt fails."""
+    Retries up to MAX_LLM_RETRIES; returns {} if every attempt fails.
+    With EXTRACT_PER_SECTION, makes one call per section and concatenates the records."""
+    if config.EXTRACT_PER_SECTION and len(matched_sections) > 1:
+        # small local models loop when several tables repeat the same rows in one prompt
+        merged, failed = {}, 0
+        for section in matched_sections:
+            part = extract_values(client, [section], vocab, user_keys, schema,
+                                  document_type=document_type, source_file=source_file,
+                                  model=model)
+            failed += not part
+            for field, records in part.items():
+                merged.setdefault(field, []).extend(records)
+        if failed:
+            # the merged result is still cached, so say which run is incomplete
+            logger.warning(f"[{model}] {failed}/{len(matched_sections)} sections failed extraction")
+        return merged
+
     model = model or config.EXTRACTION_MODELS[0]
     template = jinja_env.get_template("extraction.j2")
 
@@ -242,6 +260,7 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 response_model=extraction_model,
+                **config.LLM_EXTRA,
             )
             output = {}
             for field in extraction_model.model_fields:

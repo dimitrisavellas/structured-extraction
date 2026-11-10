@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "structured-data-extraction"
-version = "0.2.0"
+version = "0.2.1"
 description = "Pipeline for extracting structured data (tables, sections, key/value fields) from PDF documents using docling, embeddings, and LLMs."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -51,7 +51,7 @@ structured-extract-records = "structured_data_extraction.records:main"
 structured-extract-filter = "structured_data_extraction.filter_records:main"
 
 [project.urls]
-Repository = "https://gitlab.indiscale.com/caosdb/src/structured-data-extraction"
+Repository = "https://github.com/dimitrisavellas/structured-extraction.git"
 
 [tool.setuptools.packages.find]
 where = ["src"]
