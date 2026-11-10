@@ -62,3 +62,36 @@ structured_data_extraction = ["templates/*.j2", "models/section_classifier/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+lint = ["ruff==0.17.4"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RET", "PERF", "UP", "FURB", "PL", "C90", "N", "PIE", "RUF", "D", "ANN", "PLR1702"]
+ignore = [
+    "PLR2004",  # magic numbers: too noisy for data work
+    "PLR0911",  # return count: guard clauses (early returns) are the preferred style
+    "D100", "D104", "D105", "D107",  # no required module, package, magic-method, __init__ docstrings
+    "ANN401",   # allow Any where a library gives untyped objects
+]
+allowed-confusables = ["‐", "‑", "‒", "–", "−"]  # dash variants in text-normalization code
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ANN"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.pylint]
+max-branches = 8
+max-statements = 40
+max-args = 6
+max-nested-blocks = 3
