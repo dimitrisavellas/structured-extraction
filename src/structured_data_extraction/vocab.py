@@ -10,6 +10,7 @@ YAKE was chosen because it is unsupervised (no training corpus needed), fast,
 and works well on technical English. The top-N and max n-gram size are
 configurable via VOCAB_TOP_N and VOCAB_MAX_NGRAM in .env.
 """
+
 import argparse
 import logging
 from pathlib import Path
@@ -25,11 +26,14 @@ def extract_vocab(md_path):
 
     def build():
         logger.info(f"Extracting vocabulary from {md_path.name}...")
-        kw = yake.KeywordExtractor(lan="en", n=config.VOCAB_MAX_NGRAM,
-                                   dedupLim=0.7, top=config.VOCAB_TOP_N)
+        kw = yake.KeywordExtractor(
+            lan="en", n=config.VOCAB_MAX_NGRAM, dedupLim=0.7, top=config.VOCAB_TOP_N
+        )
         # lower score = more important in YAKE
-        return [{"term": term, "score": round(score, 4)}
-                for term, score in kw.extract_keywords(md_path.read_text(encoding="utf-8"))]
+        return [
+            {"term": term, "score": round(score, 4)}
+            for term, score in kw.extract_keywords(md_path.read_text(encoding="utf-8"))
+        ]
 
     return cached(inter(md_path.stem, "vocab.json"), build)
 

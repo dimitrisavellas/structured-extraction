@@ -11,6 +11,7 @@ changes their key list between runs.
 After extraction, finalize_outputs() fuses the per-model results via rater.py,
 writes provenance records, and optionally filters by confidence tier.
 """
+
 import argparse
 import json
 import logging
@@ -40,8 +41,14 @@ def _invalidate_stale_key_caches(stem, user_keys):
     if sorted(user_keys) == sorted(read_json(keys_path)):
         return
     logger.info(f"Keys changed; invalidating key-dependent caches for {stem}")
-    for name in ("key_embeddings.npy", "key_texts.json", "original_keys.json",
-                  "matches.json", "schema.json", "run.json"):
+    for name in (
+        "key_embeddings.npy",
+        "key_texts.json",
+        "original_keys.json",
+        "matches.json",
+        "schema.json",
+        "run.json",
+    ):
         p = inter(stem, name)
         if p.exists():
             p.unlink()
@@ -139,9 +146,7 @@ def process_single_pdf(pdf_path, user_keys, user_schema=None):
 
     # refine matched complex tables with vision model
     matched_idxs = {
-        match.get("section_idx", 0)
-        for key_matches in matches.values()
-        for match in key_matches
+        match.get("section_idx", 0) for key_matches in matches.values() for match in key_matches
     }
 
     if matched_idxs and tables_file.exists():
@@ -286,19 +291,34 @@ def main():
     parser.add_argument("path", nargs="?", help="Path to a PDF file or a directory of PDFs")
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
-    parser.add_argument("--force", action="store_true", help="Recompute every step, ignoring cached files")
-    parser.add_argument("--levels", nargs="+", metavar="LVL",
-                        help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
-                             "omit to be prompted after extraction")
-    parser.add_argument("--schema", metavar="FILE",
-                        help="Path to a JSON schema file (same format as intermediate/*_schema.json); "
-                             "skips schema discovery. Keys are derived from the schema, so --keys is optional")
-    parser.add_argument("--dump-templates", metavar="DIR",
-                        help="Write the built-in prompt templates to DIR for editing, then exit; "
-                             "point TEMPLATES_DIR at that folder to use your edits")
-    parser.add_argument("--local", action="store_true",
-                        help="Settings for small local models (e.g. 9B on Ollama): one "
-                             "extraction call per section, thinking off, 30-minute timeout")
+    parser.add_argument(
+        "--force", action="store_true", help="Recompute every step, ignoring cached files"
+    )
+    parser.add_argument(
+        "--levels",
+        nargs="+",
+        metavar="LVL",
+        help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
+        "omit to be prompted after extraction",
+    )
+    parser.add_argument(
+        "--schema",
+        metavar="FILE",
+        help="Path to a JSON schema file (same format as intermediate/*_schema.json); "
+        "skips schema discovery. Keys are derived from the schema, so --keys is optional",
+    )
+    parser.add_argument(
+        "--dump-templates",
+        metavar="DIR",
+        help="Write the built-in prompt templates to DIR for editing, then exit; "
+        "point TEMPLATES_DIR at that folder to use your edits",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Settings for small local models (e.g. 9B on Ollama): one "
+        "extraction call per section, thinking off, 30-minute timeout",
+    )
     args = parser.parse_args()
 
     if args.dump_templates:
@@ -319,7 +339,11 @@ def main():
             print(f"Schema file not found: {schema_path}")
             sys.exit(1)
         user_schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        if not isinstance(user_schema, dict) or "schema" not in user_schema or "document_type" not in user_schema:
+        if (
+            not isinstance(user_schema, dict)
+            or "schema" not in user_schema
+            or "document_type" not in user_schema
+        ):
             print("Schema file must contain 'document_type' and 'schema' keys")
             sys.exit(1)
 
@@ -351,7 +375,7 @@ def main():
         result = process_single_pdf(args.path, user_keys, user_schema=user_schema)
         if result:
             finalize_outputs(args.levels)
-            print(json.dumps(result, indent=2, ensure_ascii=False))  #document them well
+            print(json.dumps(result, indent=2, ensure_ascii=False))  # document them well
         else:
             print("Extraction failed.")
             sys.exit(1)

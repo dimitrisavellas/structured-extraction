@@ -54,8 +54,11 @@ def test_build_extraction_model_synthesizes_unit_field():
 
 
 def test_build_extraction_model_skips_unit_synthesis_when_present():
-    schema = {"current": {"fields": {"value": {"type": "number", "unit": True},
-                                     "unit": {"type": "string"}}}}
+    schema = {
+        "current": {
+            "fields": {"value": {"type": "number", "unit": True}, "unit": {"type": "string"}}
+        }
+    }
     rec = _record_model(_build_extraction_model(schema, ["current"]), "current")
     assert "unit" in rec.model_fields
     assert "value_unit" not in rec.model_fields
@@ -84,7 +87,9 @@ def test_merge_cleaned_tables_keeps_raw_when_no_cleaned():
 
 def test_format_sections_header_and_index():
     sections = [{"type": "text", "content": "hello", "nearest_header": "H", "section_idx": 3}]
-    assert _format_sections(sections) == "[Section 3] (text):\nSurrounding section heading: H\nhello"
+    assert (
+        _format_sections(sections) == "[Section 3] (text):\nSurrounding section heading: H\nhello"
+    )
 
 
 def test_format_sections_prefers_full_content():
@@ -100,10 +105,12 @@ def test_format_sections_truncates_text_but_not_tables():
 
 
 def test_dedup_extraction_prefers_table_section():
-    extraction = {"f": [
-        {"value": "A", "unit": "mm", "metadata": {"section_type": "text"}},
-        {"value": "A", "unit": "mm", "metadata": {"section_type": "table"}},
-    ]}
+    extraction = {
+        "f": [
+            {"value": "A", "unit": "mm", "metadata": {"section_type": "text"}},
+            {"value": "A", "unit": "mm", "metadata": {"section_type": "table"}},
+        ]
+    }
     deduped = _dedup_extraction(extraction)
     assert len(deduped["f"]) == 1
     assert deduped["f"][0]["metadata"]["section_type"] == "table"
@@ -137,7 +144,10 @@ def test_use_local_profile_keeps_explicit_settings(monkeypatch):
     monkeypatch.setattr(cfg, "LLM_TIMEOUT", 600.0)
     use_local_profile()
     assert (cfg.EXTRACT_PER_SECTION, cfg.LLM_EXTRA, cfg.LLM_TIMEOUT) == (
-        True, {"reasoning_effort": "none"}, 1800.0)
+        True,
+        {"reasoning_effort": "none"},
+        1800.0,
+    )
     monkeypatch.setattr(cfg, "LLM_EXTRA", {"reasoning_effort": "low"})
     monkeypatch.setattr(cfg, "LLM_TIMEOUT", 3600.0)
     use_local_profile()

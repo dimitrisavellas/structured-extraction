@@ -9,6 +9,7 @@ Outputs:
   - rating_report.json: inter-rater agreement stats (Cohen's kappa and raw
     agreement percentage for each model pair).
 """
+
 from collections import defaultdict
 from pathlib import Path
 from sklearn.metrics import cohen_kappa_score
@@ -68,8 +69,10 @@ def _fused_metadata(records: list[dict]) -> dict:
     A metadata dict with "section_type" and "specified" (defaulting to True).
     """
     rep = max(records, key=_filled_fields)
-    return {"section_type": _best_section(records),
-            "specified": rep.get("metadata", {}).get("specified", True)}
+    return {
+        "section_type": _best_section(records),
+        "specified": rep.get("metadata", {}).get("specified", True),
+    }
 
 
 def consensus(cluster, n_models):
@@ -79,8 +82,12 @@ def consensus(cluster, n_models):
     recs = list(cluster.values())
     rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
-    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster),
-            **fields, "metadata": _fused_metadata(recs)}
+    return {
+        "confidence": round(len(cluster) / n_models, 2),
+        "models": sorted(cluster),
+        **fields,
+        "metadata": _fused_metadata(recs),
+    }
 
 
 def load_outputs():
@@ -114,8 +121,9 @@ def _group_by_doc(facts):
     grouped = defaultdict(lambda: defaultdict(list))
     for f in facts:
         stem = Path(f["source_file"]).stem
-        grouped[stem][f["field"]].append({k: v for k, v in f.items()
-                                          if k not in ("source_file", "field")})
+        grouped[stem][f["field"]].append(
+            {k: v for k, v in f.items() if k not in ("source_file", "field")}
+        )
     # highest-confidence facts first within each key; stable, so ties keep fuse order
     for fields in grouped.values():
         for recs in fields.values():
@@ -127,13 +135,13 @@ def majority_cutoff(n):
     return n // 2 + 1
 
 
-def rate(by_file, models=None): 
+def rate(by_file, models=None):
     models = config.EXTRACTION_MODELS if models is None else models
     n = len(models)
     Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     all_facts = fuse_outputs(by_file, models)
 
-    # fused.json = the end result 
+    # fused.json = the end result
     fused_path = Path(config.OUTPUT_DIR) / "fused.json"
     write_json(fused_path, _group_by_doc(all_facts))
 
@@ -157,7 +165,7 @@ def agreement(facts, models):
     present = {m: [1 if m in f["models"] else 0 for f in facts] for m in models}
     rows = []
     for i, a in enumerate(models):
-        for b in models[i + 1:]:
+        for b in models[i + 1 :]:
             agree = sum(x == y for x, y in zip(present[a], present[b])) / len(facts)
             if len(set(present[a] + present[b])) < 2:
                 # cohen_kappa_score requires at least two label classes; skip if all labels are identical

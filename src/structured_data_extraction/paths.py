@@ -1,6 +1,5 @@
-"""Path helpers and a simple JSON cache.
+"""Path helpers and a simple JSON cache."""
 
-"""
 import json
 from pathlib import Path
 from . import config

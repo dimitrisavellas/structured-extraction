@@ -21,6 +21,7 @@ renders the PDF bounding box via PyMuPDF, sends the image to the vision model,
 and expands any remaining rowspan/colspan into flat repeated cells so downstream
 extraction sees a regular grid.
 """
+
 import base64
 import concurrent.futures
 import json
@@ -101,11 +102,11 @@ def score_table_complexity(content):
     stats = _pipe_stats(content)
     if stats is not None:
         ragged, sparsity, hierarchy, ncols, merges = stats
-        score += _ramp(sparsity, 0.15, 0.60) * 0.40    # sparse grid
-        score += ragged * 0.30                         # broken rows
-        score += min(hierarchy / 0.30, 1.0) * 0.20     # nested groups
-        score += _ramp(ncols, 4, 12) * 0.10            # wide tables
-        score += _ramp(merges, 0.05, 0.35) * 0.35      # vertically merged cells
+        score += _ramp(sparsity, 0.15, 0.60) * 0.40  # sparse grid
+        score += ragged * 0.30  # broken rows
+        score += min(hierarchy / 0.30, 1.0) * 0.20  # nested groups
+        score += _ramp(ncols, 4, 12) * 0.10  # wide tables
+        score += _ramp(merges, 0.05, 0.35) * 0.35  # vertically merged cells
 
     return min(score, 1.0)
 
@@ -165,7 +166,9 @@ _ollama_client = None
 def _client():
     global _ollama_client
     if _ollama_client is None:
-        _ollama_client = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
+        _ollama_client = OpenAI(
+            base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"]
+        )
     return _ollama_client
 
 
@@ -179,13 +182,15 @@ def _call_model(model, messages):
 
 
 def _call_vision_model(b64_img):
-    messages = [{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": TABLE_VISION_PROMPT},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}},
-        ],
-    }]
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": TABLE_VISION_PROMPT},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}},
+            ],
+        }
+    ]
     return _call_model(os.environ["VISION_MODEL"], messages)
 
 
@@ -197,6 +202,7 @@ def _call_text_model(table_md):
 
 class _TableParser(HTMLParser):
     """Parse an HTML table into a list of rows, each row being a list of (tag, text, colspan, rowspan)."""
+
     def __init__(self):
         super().__init__()
         self.rows = []
@@ -217,9 +223,14 @@ class _TableParser(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag in ("td", "th") and self._cell is not None:
-            self._row.append((tag, "".join(self._cell).strip(),
-                              int(self._attrs.get("colspan") or 1),
-                              int(self._attrs.get("rowspan") or 1)))
+            self._row.append(
+                (
+                    tag,
+                    "".join(self._cell).strip(),
+                    int(self._attrs.get("colspan") or 1),
+                    int(self._attrs.get("rowspan") or 1),
+                )
+            )
             self._cell = None
         elif tag == "tr" and self._row is not None:
             self.rows.append(self._row)
@@ -260,7 +271,7 @@ def process_tables(sections_path):
     if not sections_path.exists():
         raise FileNotFoundError(f"Sections not found: {sections_path}")
 
-    stem = sections_path.stem.replace("_sections", "") 
+    stem = sections_path.stem.replace("_sections", "")
     out_path = Path(config.INTERMEDIATE_DIR) / f"{stem}_tables.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -286,13 +297,15 @@ def process_tables(sections_path):
 
         logger.info(f"  Table {i}: complexity={complexity:.2f}")
 
-        results.append({
-            "section_idx": section_idx,
-            "complexity_score": round(complexity, 4),
-            "page": page,
-            "content": content,
-            "bbox": section.get("bbox"),
-        })
+        results.append(
+            {
+                "section_idx": section_idx,
+                "complexity_score": round(complexity, 4),
+                "page": page,
+                "content": content,
+                "bbox": section.get("bbox"),
+            }
+        )
 
     out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info(f"Scored {len(results)} tables → {out_path}")
@@ -330,21 +343,33 @@ _WORD_RE = re.compile(r"[A-Za-z]{4,}")
 
 
 def _word_cell_ratio(content):
-    cells = [c.strip() for line in content.splitlines() for c in line.split("|") # skip empty lines and separator rows
-             if c.strip() and set(c.strip()) != {"-"}]
+    cells = [
+        c.strip()
+        for line in content.splitlines()
+        for c in line.split("|")  # skip empty lines and separator rows
+        if c.strip() and set(c.strip()) != {"-"}
+    ]
     if len(cells) < 12:
         return 1.0
-    return sum(1 for c in cells if _WORD_RE.search(c)) / len(cells) # fraction of cells containing at least one word of 4+ letters
+    return sum(1 for c in cells if _WORD_RE.search(c)) / len(
+        cells
+    )  # fraction of cells containing at least one word of 4+ letters
 
 
 def refine_symbol_only_tables(tables_path, pdf_path=None):
     threshold = config.VISION_COMPLEXITY_THRESHOLD
     tables = json.loads(Path(tables_path).read_text(encoding="utf-8"))
-    idxs = {t["section_idx"] for t in tables
-            if t.get("complexity_score", 0) >= threshold
-            and "|" in t.get("content", "") and _word_cell_ratio(t["content"]) < 0.10} 
+    idxs = {
+        t["section_idx"]
+        for t in tables
+        if t.get("complexity_score", 0) >= threshold
+        and "|" in t.get("content", "")
+        and _word_cell_ratio(t["content"]) < 0.10
+    }
     if idxs:
-        logger.info(f"Pre-refining {len(idxs)} symbol-only table(s) before embedding: {sorted(idxs)}")
+        logger.info(
+            f"Pre-refining {len(idxs)} symbol-only table(s) before embedding: {sorted(idxs)}"
+        )
         refine_matched_tables(tables_path, idxs, pdf_path=pdf_path)
 
 
@@ -369,14 +394,16 @@ def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
 
     threshold = config.VISION_COMPLEXITY_THRESHOLD
     matched = [t for t in tables if t.get("section_idx") in matched_section_indices]
-    to_refine = [t for t in matched
-                 if t.get("complexity_score", 0) >= threshold
-                 and not t.get("refined")]
+    to_refine = [
+        t for t in matched if t.get("complexity_score", 0) >= threshold and not t.get("refined")
+    ]
 
     skipped = len(matched) - len(to_refine)
     if skipped:
-        logger.info(f"  Refining {len(to_refine)} matched tables above complexity "
-                    f"{threshold}; {skipped} simpler ones left as markdown")
+        logger.info(
+            f"  Refining {len(to_refine)} matched tables above complexity "
+            f"{threshold}; {skipped} simpler ones left as markdown"
+        )
 
     if not to_refine:
         return tables
@@ -387,7 +414,9 @@ def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
     by_idx = {table["section_idx"]: table for table in tables}
     vision_count = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool: # use threads for tasks (PDF rendering, LLM calls)
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=workers
+    ) as pool:  # use threads for tasks (PDF rendering, LLM calls)
         futures = [pool.submit(_refine_one_table, table, pdf_path) for table in to_refine]
         for fut in concurrent.futures.as_completed(futures):
             idx, html, used_vision = fut.result()

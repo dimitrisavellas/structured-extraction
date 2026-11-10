@@ -11,6 +11,7 @@ the hit came from.
 
 Results are cached to matches.json and reused on reruns unless --force is set.
 """
+
 import argparse
 import logging
 import numpy as np
@@ -44,12 +45,14 @@ def _build_match_dict(idx, score, sec_texts, sections, num_secs, rows):
         "content_preview": preview,
     }
     if is_row:
-        match.update({
-            "is_row": True,
-            "row_text": row_info.get("row_text", ""),
-            "row_number": row_info.get("row_number"),
-            "group_header": row_info.get("group_header", ""),
-        })
+        match.update(
+            {
+                "is_row": True,
+                "row_text": row_info.get("row_text", ""),
+                "row_number": row_info.get("row_number"),
+                "group_header": row_info.get("group_header", ""),
+            }
+        )
     if sec_idx < len(sections):
         match["type"] = sections[sec_idx].get("type", "unknown")
 
@@ -82,14 +85,19 @@ def search(stem, original_keys=None, threshold=None):
         # num_secs is the boundary: idx >= num_secs means a row hit
         num_secs = row_map.get("num_sections", len(sections))
         rows = row_map.get("rows", [])
-        keys = original_keys if original_keys is not None else read_json(inter(stem, "original_keys.json"))
+        keys = (
+            original_keys
+            if original_keys is not None
+            else read_json(inter(stem, "original_keys.json"))
+        )
 
         sims = cosine_similarity(key_embs, sec_embs)
         matches = {}
         for i, key_text in enumerate(key_texts):
             orig_key = keys[i] if i < len(keys) else key_text
             matches[orig_key] = _select_hits_for_key(
-                sims[i], sec_texts, sections, num_secs, rows, threshold)
+                sims[i], sec_texts, sections, num_secs, rows, threshold
+            )
             logger.info(f"Key '{orig_key}': {len(matches[orig_key])} matches above {threshold}")
         return matches
 

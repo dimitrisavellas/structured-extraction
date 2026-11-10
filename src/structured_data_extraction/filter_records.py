@@ -10,6 +10,7 @@ the pipeline's end-of-run step. When no --levels are given, an interactive menu
 lets the user pick tiers; with a single extraction model every record is
 confidence 1.0, so the filter is a no-op.
 """
+
 import argparse
 import json
 from collections import Counter
@@ -17,7 +18,7 @@ from pathlib import Path
 from . import config
 
 RECORDS = Path(config.OUTPUT_DIR) / "records.json"
-_META = {"type", "generated_at", "provenance"}   # envelope keys that aren't extracted fields
+_META = {"type", "generated_at", "provenance"}  # envelope keys that aren't extracted fields
 
 
 def load(path=RECORDS):
@@ -34,8 +35,9 @@ def _records(data):
 
 def counts(data):
     """{confidence tier: record count}, highest tier first."""
-    tally = Counter(round(r["confidence"], 2) for r in _records(data)
-                    if r.get("confidence") is not None)
+    tally = Counter(
+        round(r["confidence"], 2) for r in _records(data) if r.get("confidence") is not None
+    )
     return dict(sorted(tally.items(), reverse=True))
 
 
@@ -62,8 +64,11 @@ def keep(data, tiers):
             if key in _META:
                 kept[key] = val
             elif isinstance(val, list):
-                recs = [r for r in val
-                        if r.get("confidence") is not None and round(r["confidence"], 2) in chosen]
+                recs = [
+                    r
+                    for r in val
+                    if r.get("confidence") is not None and round(r["confidence"], 2) in chosen
+                ]
                 if recs:
                     kept[key] = recs
         if any(k not in _META for k in kept):
@@ -79,11 +84,14 @@ def _pick(tiers):
     try:
         raw = input("Select tiers (e.g. '1,3' or 'a'): ").strip().lower()
     except EOFError:
-        return tiers   # no one on stdin (piped/non-interactive) → keep all rather than crash
+        return tiers  # no one on stdin (piped/non-interactive) → keep all rather than crash
     if raw in ("", "a", "all"):
         return tiers
-    return [tiers[int(x) - 1] for x in raw.replace(" ", "").split(",")
-            if x.isdigit() and 1 <= int(x) <= len(tiers)] or tiers
+    return [
+        tiers[int(x) - 1]
+        for x in raw.replace(" ", "").split(",")
+        if x.isdigit() and 1 <= int(x) <= len(tiers)
+    ] or tiers
 
 
 def run(path=RECORDS, levels=None, json_out=None):
@@ -93,7 +101,7 @@ def run(path=RECORDS, levels=None, json_out=None):
     levels: tiers to keep (e.g. [1.0, 0.75]) or ["all"]; None => interactive menu.
     """
     data = load(path)
-    tiers = list(counts(data))          # highest first
+    tiers = list(counts(data))  # highest first
     if not tiers:
         print(f"No scored records in {path}")
         return
@@ -121,8 +129,12 @@ def run(path=RECORDS, levels=None, json_out=None):
 
 def main():
     ap = argparse.ArgumentParser(description="Filter records by consensus confidence")
-    ap.add_argument("--levels", nargs="+", metavar="LVL",
-                    help="tiers to keep, e.g. 1.0 0.75 (or 'all'); omit for an interactive menu")
+    ap.add_argument(
+        "--levels",
+        nargs="+",
+        metavar="LVL",
+        help="tiers to keep, e.g. 1.0 0.75 (or 'all'); omit for an interactive menu",
+    )
     ap.add_argument("--file", default=str(RECORDS), help="records.json to read")
     ap.add_argument("--json", help="write the kept records here instead of printing")
     args = ap.parse_args()

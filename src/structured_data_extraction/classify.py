@@ -12,6 +12,7 @@ content stream that every downstream step (embedding, search, extraction) reads.
 The trained model (~89 MB: one joblib per vectoriser plus the forest) ships
 inside the package under models/section_classifier/.
 """
+
 import argparse
 import json
 import logging
@@ -23,11 +24,11 @@ from .features import build_features, context_rows
 
 logger = logging.getLogger(__name__)
 
+
 # Section classifier is a random forest model trained on labeled sections from the Docling dataset.
-# It uses TF-IDF features of the text and character n-grams, as well as the Docling label of each section, 
+# It uses TF-IDF features of the text and character n-grams, as well as the Docling label of each section,
 # to predict the section type (table, text, list, etc)
 class SectionClassifier:
-
     def __init__(self, model_dir=None):
         d = Path(model_dir) if model_dir else Path(config.SECTION_CLASSIFIER_DIR)
         self.rf = joblib.load(d / "rf_classifier.joblib")
@@ -110,23 +111,27 @@ def classify_sections(pdf_stem):
     for i, item in enumerate(items):
         if i in by_idx:
             chunk = by_idx[i]
-            sections.append({
-                "type": chunk["section_type"],
-                "content": chunk["text"],
-                "docling_label": chunk["docling_label"],
-                "page": chunk["page"],
-                "bbox": chunk["bbox"],
-                "section_idx": i,
-            })
+            sections.append(
+                {
+                    "type": chunk["section_type"],
+                    "content": chunk["text"],
+                    "docling_label": chunk["docling_label"],
+                    "page": chunk["page"],
+                    "bbox": chunk["bbox"],
+                    "section_idx": i,
+                }
+            )
         elif item.get("label") == "picture":
-            sections.append({
-                "type": "picture",
-                "content": "",
-                "docling_label": item.get("label"),
-                "page": item.get("page"),
-                "bbox": item.get("bbox"),
-                "section_idx": i,
-            })
+            sections.append(
+                {
+                    "type": "picture",
+                    "content": "",
+                    "docling_label": item.get("label"),
+                    "page": item.get("page"),
+                    "bbox": item.get("bbox"),
+                    "section_idx": i,
+                }
+            )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(sections, indent=2, ensure_ascii=False), encoding="utf-8")

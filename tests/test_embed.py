@@ -149,11 +149,15 @@ def test_parse_all_rows_prefixes_group_header():
 
 def test_save_outputs(tmp_path):
     _save_outputs(
-        "doc1", tmp_path,
+        "doc1",
+        tmp_path,
         all_embs=np.array([[1.0, 2.0]]),
         key_embs=np.array([[3.0, 4.0]]),
-        all_texts=["t1"], expanded=["k1"], originals=["o1"],
-        row_map=[{"row_number": 0}], num_sections=1,
+        all_texts=["t1"],
+        expanded=["k1"],
+        originals=["o1"],
+        row_map=[{"row_number": 0}],
+        num_sections=1,
     )
     assert np.load(tmp_path / "doc1_section_embeddings.npy").tolist() == [[1.0, 2.0]]
     assert np.load(tmp_path / "doc1_key_embeddings.npy").tolist() == [[3.0, 4.0]]
@@ -179,18 +183,22 @@ class _FakeModel:
 def test_embed_sections_and_keys(tmp_path):
     """End-to-end glue: sections + table rows + keys get the right task prefixes and artifacts."""
     (tmp_path / "doc_sections.json").write_text(
-        json.dumps([
-            {"type": "text", "content": "hello"},
-            {"type": "table", "content": "raw"},
-        ])
+        json.dumps(
+            [
+                {"type": "text", "content": "hello"},
+                {"type": "table", "content": "raw"},
+            ]
+        )
     )
     (tmp_path / "doc_tables.json").write_text(
         json.dumps([{"section_idx": 1, "content": "| A | B |\n| C | D |"}])
     )
 
     fake = _FakeModel()
-    with patch("structured_data_extraction.embed.config.INTERMEDIATE_DIR", str(tmp_path)), \
-         patch("structured_data_extraction.embed._load_model", return_value=fake):
+    with (
+        patch("structured_data_extraction.embed.config.INTERMEDIATE_DIR", str(tmp_path)),
+        patch("structured_data_extraction.embed._load_model", return_value=fake),
+    ):
         embed_sections_and_keys("doc", user_keys=["temperature"])
 
     # documents carry the search_document: prefix, in section-then-row order

@@ -5,6 +5,7 @@ that records the source file, document type, which models were used (schema,
 vision, embedding), the user's original keys, and the normalised key mapping.
 The result is records.json.
 """
+
 import os
 from pathlib import Path
 from . import config, matching

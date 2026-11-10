@@ -17,6 +17,7 @@ Table rows are parsed into per-row text (with group headers prepended) so that
 search can match an individual parameter row inside a large table rather than
 only matching the table as a whole.
 """
+
 import argparse
 import json
 import logging
@@ -42,7 +43,9 @@ def _load_model(model_name=None):
     name = model_name or os.environ["EMBEDDING_MODEL"]
     if name not in _model_cache:
         logger.info(f"Loading embedding model: {name} on {config.EMBEDDING_DEVICE}")
-        _model_cache[name] = SentenceTransformer(name, device=config.EMBEDDING_DEVICE, trust_remote_code=True)
+        _model_cache[name] = SentenceTransformer(
+            name, device=config.EMBEDDING_DEVICE, trust_remote_code=True
+        )
     return _model_cache[name]
 
 
@@ -71,22 +74,32 @@ def _is_group_header(cells):
         return False
     empty_count = sum(1 for cell in cells[1:] if not cell)
     standalone_nums = sum(
-        1 for cell in cells[1:]
-        if cell and re.match(r'^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$', cell.strip()) # matches standalone numbers with optional units
+        1
+        for cell in cells[1:]
+        if cell
+        and re.match(
+            r"^[\±\-\+]?\d+\.?\d*\s*[a-zA-Zµ°/²³%]*$", cell.strip()
+        )  # matches standalone numbers with optional units
     )
-    has_equals = '=' in cells[0]
-    return empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals # if most cells are empty, few standalone numbers,
-                                                                                        # and no equals sign in the first cell, it's likely a group header
+    has_equals = "=" in cells[0]
+    return (
+        empty_count >= len(cells[1:]) * 0.6 and standalone_nums < 2 and not has_equals
+    )  # if most cells are empty, few standalone numbers,
+    # and no equals sign in the first cell, it's likely a group header
 
 
 def _parse_html_rows(content):
     """Parse table rows from HTML content, return a list of row dictionaries."""
     rows = []
-    for n, tr in enumerate(re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)): # find all <tr>...</tr> blocks
-        cells = [re.sub(r"<[^>]+>", "", c).strip()
-                 for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)] # find all <td> or <th> blocks within the <tr>
+    for n, tr in enumerate(
+        re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)
+    ):  # find all <tr>...</tr> blocks
+        cells = [
+            re.sub(r"<[^>]+>", "", c).strip()
+            for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)
+        ]  # find all <td> or <th> blocks within the <tr>
         dedup = []
-        for c in cells:                       # collapse repeats from rowspan/colspan expansion
+        for c in cells:  # collapse repeats from rowspan/colspan expansion
             if not dedup or dedup[-1] != c:
                 dedup.append(c)
         row_text = " | ".join(c for c in dedup if c)
@@ -97,9 +110,9 @@ def _parse_html_rows(content):
 
 def _parse_table_rows(content):
     """Parse table rows from markdown content, return a list of row dictionaries."""
-    if "<tr" in content.lower():              # pre-embed refined tables are HTML, not markdown pipes
+    if "<tr" in content.lower():  # pre-embed refined tables are HTML, not markdown pipes
         return _parse_html_rows(content)
-    lines = content.strip().split('\n')
+    lines = content.strip().split("\n")
     rows = []
     group_header = ""
     col_headers = []
@@ -107,28 +120,31 @@ def _parse_table_rows(content):
 
     for line in lines:
         stripped = line.strip()
-        if not stripped or not stripped.startswith('|'):
+        if not stripped or not stripped.startswith("|"):
             continue
-        if re.match(r'^\|[\s\-:|]+\|$', stripped):
+        if re.match(r"^\|[\s\-:|]+\|$", stripped):
             continue
 
-        cells = [cell.strip() for cell in stripped.split('|')]
-        if cells and cells[0] == '':
+        cells = [cell.strip() for cell in stripped.split("|")]
+        if cells and cells[0] == "":
             cells = cells[1:]
-        if cells and cells[-1] == '':
+        if cells and cells[-1] == "":
             cells = cells[:-1]
         if not cells:
             continue
 
-        
         non_empty = [cell for cell in cells if cell]
-        if non_empty and all(cell in ('Min', 'Typ', 'Max') for cell in non_empty) and len(non_empty) >= 3:
+        if (
+            non_empty
+            and all(cell in ("Min", "Typ", "Max") for cell in non_empty)
+            and len(non_empty) >= 3
+        ):
             col_headers = cells
             continue
 
         if _is_group_header(cells):
             group_header = cells[0]
-            row_text = ' | '.join(cell for cell in cells if cell)
+            row_text = " | ".join(cell for cell in cells if cell)
             if row_text.strip():
                 rows.append({"row_number": row_num, "row_text": row_text, "group_header": ""})
                 row_num += 1
@@ -141,9 +157,9 @@ def _parse_table_rows(content):
                     annotated.append(f"[{col_headers[i]}] {cell}")
                 else:
                     annotated.append(cell)
-            row_text = ' | '.join(annotated)
+            row_text = " | ".join(annotated)
         else:
-            row_text = ' | '.join(cells)
+            row_text = " | ".join(cells)
 
         if row_text.strip():
             rows.append({"row_number": row_num, "row_text": row_text, "group_header": group_header})
@@ -179,12 +195,14 @@ def _parse_all_rows(sections, table_by_idx):
             if row_info["group_header"]:
                 txt = f"{row_info['group_header']} > {txt}"
             row_texts.append(f"table_row: {txt}")
-            row_map.append({
-                "section_idx": i,
-                "row_number": row_info["row_number"],
-                "row_text": row_info["row_text"],
-                "group_header": row_info["group_header"],
-            })
+            row_map.append(
+                {
+                    "section_idx": i,
+                    "row_number": row_info["row_number"],
+                    "row_text": row_info["row_text"],
+                    "group_header": row_info["group_header"],
+                }
+            )
     return row_texts, row_map
 
 
@@ -195,8 +213,9 @@ def _expand_all_keys(user_keys, vocab):
     return expanded, originals
 
 
-def _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals, row_map,
-                  num_sections):
+def _save_outputs(
+    stem, out_dir, all_embs, key_embs, all_texts, expanded, originals, row_map, num_sections
+):
     """Write the embedding + text artifacts for this stem."""
     np.save(str(out_dir / f"{stem}_section_embeddings.npy"), all_embs)
     np.save(str(out_dir / f"{stem}_key_embeddings.npy"), key_embs)
@@ -242,18 +261,30 @@ def embed_sections_and_keys(stem, user_keys=None, model_name=None):
         all_texts = sec_texts + row_texts
         num_sections = len(sec_texts)
         logger.info(f"Embedding {len(sec_texts)} sections + {len(row_texts)} rows...")
-        all_embs = model.encode([f"search_document: {t}" for t in all_texts],
-                                show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
+        all_embs = model.encode(
+            [f"search_document: {t}" for t in all_texts],
+            show_progress_bar=False,
+            batch_size=EMBED_BATCH_SIZE,
+        )
 
     expanded, originals = _expand_all_keys(user_keys, vocab)
     logger.info(f"Embedding {len(expanded)} keys...")
-    key_embs = (model.encode([f"search_query: {k}" for k in expanded],
-                             show_progress_bar=False, batch_size=EMBED_BATCH_SIZE)
-                if expanded else np.array([]))
+    key_embs = (
+        model.encode(
+            [f"search_query: {k}" for k in expanded],
+            show_progress_bar=False,
+            batch_size=EMBED_BATCH_SIZE,
+        )
+        if expanded
+        else np.array([])
+    )
 
-    _save_outputs(stem, out_dir, all_embs, key_embs, all_texts, expanded, originals,
-                  row_map, num_sections)
-    logger.info(f"Saved embeddings: {all_embs.shape[0]} content ({num_sections} sections + {len(row_map)} rows), {len(expanded)} keys")
+    _save_outputs(
+        stem, out_dir, all_embs, key_embs, all_texts, expanded, originals, row_map, num_sections
+    )
+    logger.info(
+        f"Saved embeddings: {all_embs.shape[0]} content ({num_sections} sections + {len(row_map)} rows), {len(expanded)} keys"
+    )
 
 
 def main():
