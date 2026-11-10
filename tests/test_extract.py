@@ -1,5 +1,7 @@
 from typing import get_args
+from unittest.mock import MagicMock, patch
 
+from structured_data_extraction import extract
 from structured_data_extraction.extract import (
     _build_extraction_model,
     _dedup_extraction,
@@ -7,6 +9,21 @@ from structured_data_extraction.extract import (
     _merge_cleaned_tables,
     _neighbor_line,
 )
+from structured_data_extraction.main import use_local_profile
+
+
+def test_extract_values_per_section_one_call_each_and_merges(monkeypatch):
+    monkeypatch.setenv("MAX_LLM_RETRIES", "0")
+    client = MagicMock()
+    client.chat.completions.create.side_effect = [
+        MagicMock(gain=[MagicMock(model_dump=lambda: {"value": 1})]),
+        MagicMock(gain=[MagicMock(model_dump=lambda: {"value": 2})]),
+    ]
+    sections = [{"type": "table", "content": "a"}, {"type": "table", "content": "b"}]
+    with patch.object(extract.config, "EXTRACT_PER_SECTION", True):
+        out = extract.extract_values(client, sections, [], ["gain"], {}, model="m")
+    assert client.chat.completions.create.call_count == 2
+    assert out == {"gain": [{"value": 1}, {"value": 2}]}
 
 
 def _record_model(model, field):
@@ -111,3 +128,17 @@ def test_neighbor_line_skips_table_and_header_and_bounds():
     sections = [{"type": "table", "content": "t"}, {"type": "text", "content": "x"}]
     assert _neighbor_line(sections, 1, "prev") == ""  # table neighbor ignored
     assert _neighbor_line(sections, 0, "prev") == ""  # out of bounds
+
+
+def test_use_local_profile_keeps_explicit_settings(monkeypatch):
+    cfg = extract.config
+    monkeypatch.setattr(cfg, "EXTRACT_PER_SECTION", False)
+    monkeypatch.setattr(cfg, "LLM_EXTRA", {})
+    monkeypatch.setattr(cfg, "LLM_TIMEOUT", 600.0)
+    use_local_profile()
+    assert (cfg.EXTRACT_PER_SECTION, cfg.LLM_EXTRA, cfg.LLM_TIMEOUT) == (
+        True, {"reasoning_effort": "none"}, 1800.0)
+    monkeypatch.setattr(cfg, "LLM_EXTRA", {"reasoning_effort": "low"})
+    monkeypatch.setattr(cfg, "LLM_TIMEOUT", 3600.0)
+    use_local_profile()
+    assert (cfg.LLM_EXTRA, cfg.LLM_TIMEOUT) == ({"reasoning_effort": "low"}, 3600.0)

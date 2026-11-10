@@ -271,6 +271,16 @@ def _dump_templates(dest):
     return dest
 
 
+def use_local_profile() -> None:
+    """Switch config to settings for small local models (main.py --local).
+
+    Explicit .env values for REASONING_EFFORT and a longer LLM_TIMEOUT are kept.
+    """
+    config.EXTRACT_PER_SECTION = True  # one prompt with many repeated tables makes 9B models loop
+    config.LLM_EXTRA = config.LLM_EXTRA or {"reasoning_effort": "none"}  # thinking can run away
+    config.LLM_TIMEOUT = max(config.LLM_TIMEOUT, 1800.0)  # ~11 tok/s can need > 10 min
+
+
 def main():
     parser = argparse.ArgumentParser(description="Document extraction pipeline")
     parser.add_argument("path", nargs="?", help="Path to a PDF file or a directory of PDFs")
@@ -286,6 +296,9 @@ def main():
     parser.add_argument("--dump-templates", metavar="DIR",
                         help="Write the built-in prompt templates to DIR for editing, then exit; "
                              "point TEMPLATES_DIR at that folder to use your edits")
+    parser.add_argument("--local", action="store_true",
+                        help="Settings for small local models (e.g. 9B on Ollama): one "
+                             "extraction call per section, thinking off, 30-minute timeout")
     args = parser.parse_args()
 
     if args.dump_templates:
@@ -296,6 +309,8 @@ def main():
         parser.error("a PDF file or directory is required (unless using --dump-templates)")
 
     config.FORCE = args.force
+    if args.local:
+        use_local_profile()
 
     user_schema = None
     if args.schema:
