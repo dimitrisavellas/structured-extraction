@@ -14,6 +14,7 @@ removing, or reordering features requires retraining.
 """
 
 import re
+
 import numpy as np
 from scipy import sparse
 
@@ -25,7 +26,7 @@ BULLET_RE = re.compile(r"^[•●○▪►→■□◆◇★☆\-\*]\s*")
 # A lone leading "n" + space + non-space: docling sometimes mangles a "•" bullet into "n".
 N_BULLET_RE = re.compile(r"^n\s+\S")
 # Start of a figure/table caption: "Figure 1", "Fig. 2", "Table 3", "Tab. 4".
-FIG_RE = re.compile(r"^(Fig\.?|Figure|Table|Tab\.)\s*\d", re.I)
+FIG_RE = re.compile(r"^(Fig\.?|Figure|Table|Tab\.)\s*\d", re.IGNORECASE)
 # Characters that signal engineering/scientific units: ohm, micro (two code points), degree, plus-minus.
 UNITS = set("ΩμµΩ°±")
 
@@ -34,7 +35,7 @@ HASH_RE = re.compile(r"^(#{1,6})\s")
 # A caption label prefix like "Figure 1: " or "Table 3.2." Stripped before sentence counting
 # so the "1." in "Figure 1." isn't mistaken for a sentence boundary.
 FIG_TABLE_PREFIX_RE = re.compile(
-    r"^(Figure|Fig\.|Table|Tab\.)\s+[A-Z0-9][A-Z0-9\-\.]*[\.\:]\s*", re.I
+    r"^(Figure|Fig\.|Table|Tab\.)\s+[A-Z0-9][A-Z0-9\-\.]*[\.\:]\s*", re.IGNORECASE
 )
 # A sentence boundary: lowercase/quote/paren, then ". ", then a capital letter.
 SENTENCE_BOUNDARY_RE = re.compile(r"[a-z\)\"\']\.\s+[A-Z]")

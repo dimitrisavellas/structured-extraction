@@ -11,9 +11,8 @@ threshold, etc.) have sensible defaults but can be overridden per-run in .env.
 """
 
 import os
-from pathlib import Path
 from importlib import resources
-
+from pathlib import Path
 
 CWD = Path.cwd()
 PDF_DIR = CWD / "pdf"
@@ -28,7 +27,8 @@ SECTION_CLASSIFIER_DIR = (
 
 
 def _auto_device():
-    import torch
+    # Lazy import: torch is slow to load and only needed when EMBEDDING_DEVICE is unset.
+    import torch  # noqa: PLC0415
 
     if torch.cuda.is_available():
         return "cuda"
@@ -66,12 +66,12 @@ def _env_bool(name, default):
     return default if v is None else v.strip().lower() in ("1", "true", "yes", "on")
 
 
-VOCAB_TOP_N = int(os.environ.get("VOCAB_TOP_N", 50))
-VOCAB_MAX_NGRAM = int(os.environ.get("VOCAB_MAX_NGRAM", 4))
-SIMILARITY_THRESHOLD = float(os.environ.get("SIMILARITY_THRESHOLD", 0.55))
-SEARCH_TOP_K = int(os.environ.get("SEARCH_TOP_K", 25))
-VISION_COMPLEXITY_THRESHOLD = float(os.environ.get("VISION_COMPLEXITY_THRESHOLD", 0.15))
-VISION_PARALLELISM = int(os.environ.get("VISION_PARALLELISM", 4))
+VOCAB_TOP_N = int(os.environ.get("VOCAB_TOP_N", "50"))
+VOCAB_MAX_NGRAM = int(os.environ.get("VOCAB_MAX_NGRAM", "4"))
+SIMILARITY_THRESHOLD = float(os.environ.get("SIMILARITY_THRESHOLD", "0.55"))
+SEARCH_TOP_K = int(os.environ.get("SEARCH_TOP_K", "25"))
+VISION_COMPLEXITY_THRESHOLD = float(os.environ.get("VISION_COMPLEXITY_THRESHOLD", "0.15"))
+VISION_PARALLELISM = int(os.environ.get("VISION_PARALLELISM", "4"))
 EXPAND_KEYS = _env_bool("EXPAND_KEYS", True)
 # One extraction call per matched section instead of one call for all of them. Slower, but
 # stops small local models from looping on rows repeated across tables.

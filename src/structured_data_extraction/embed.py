@@ -19,27 +19,29 @@ only matching the table as a whole.
 """
 
 import argparse
-import json
 import logging
 import os
 import re
 from pathlib import Path
+
 import numpy as np
 from sentence_transformers import SentenceTransformer
+
 from . import config
 from .paths import inter, read_json, write_json
 
 logger = logging.getLogger(__name__)
 
 
-EMBED_BATCH_SIZE = int(os.environ.get("EMBED_BATCH_SIZE", 4))
+EMBED_BATCH_SIZE = int(os.environ.get("EMBED_BATCH_SIZE", "4"))
 
 _model_cache = {}
 
 
 def _load_model(model_name=None):
     """Load the embedding model (from the given name or env), caching it so the hundreds-of-MB
-    SentenceTransformer is loaded once and reused across PDFs."""
+    SentenceTransformer is loaded once and reused across PDFs.
+    """
     name = model_name or os.environ["EMBEDDING_MODEL"]
     if name not in _model_cache:
         logger.info(f"Loading embedding model: {name} on {config.EMBEDDING_DEVICE}")
@@ -92,11 +94,11 @@ def _parse_html_rows(content):
     """Parse table rows from HTML content, return a list of row dictionaries."""
     rows = []
     for n, tr in enumerate(
-        re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.S | re.I)
+        re.findall(r"<tr\b[^>]*>(.*?)</tr>", content, re.DOTALL | re.IGNORECASE)
     ):  # find all <tr>...</tr> blocks
         cells = [
             re.sub(r"<[^>]+>", "", c).strip()
-            for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.S | re.I)
+            for c in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", tr, re.DOTALL | re.IGNORECASE)
         ]  # find all <td> or <th> blocks within the <tr>
         dedup = []
         for c in cells:  # collapse repeats from rowspan/colspan expansion

@@ -15,6 +15,7 @@ import argparse
 import json
 from collections import Counter
 from pathlib import Path
+
 from . import config
 
 RECORDS = Path(config.OUTPUT_DIR) / "records.json"
@@ -43,7 +44,8 @@ def counts(data):
 
 def tier_summary(data):
     """One line per tier: the cumulative '>= tier' count (and its share of the total), plus the
-    count exactly at the tier. Returned as lines so a caller can print (CLI) or log (pipeline)."""
+    count exactly at the tier. Returned as lines so a caller can print (CLI) or log (pipeline).
+    """
     tiers = counts(data)
     total = sum(tiers.values()) or 1
     lines = []
@@ -55,7 +57,8 @@ def tier_summary(data):
 
 def keep(data, tiers):
     """Return a subset with the same envelope shape, only records whose confidence is in `tiers`.
-    A field left with no records is dropped; a document left with no fields is omitted."""
+    A field left with no records is dropped; a document left with no fields is omitted.
+    """
     chosen = {round(t, 2) for t in tiers}
     out = {}
     for stem, env in data.items():

@@ -15,43 +15,43 @@ converts on read.
 """
 
 import argparse
+import functools
 import json
 import logging
 import re
 from pathlib import Path
-from docling.document_converter import DocumentConverter, PdfFormatOption
+
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
 from . import config
 
 logger = logging.getLogger(__name__)
 
-_converter = None
 
-
+@functools.cache
 def _get_converter():
     """Build the Docling converter on first use — it loads vision models, so importing
-    this module shouldn't pay that cost."""
-    global _converter
-    if _converter is None:
-        # Custom Docling pipeline configuration for PDF conversion
-        pipeline_opts = PdfPipelineOptions()
-        pipeline_opts.do_ocr = False
-        pipeline_opts.do_table_structure = True
-        pipeline_opts.table_structure_options.mode = (
-            TableFormerMode.FAST
-        )  # reduced runtime by 2x compared to accurate mode,similar output quality
-        # since we pay the price of vision refinement anyways at least we have speed
-        _converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_opts,
-                    backend=PyPdfiumDocumentBackend,  # since we don't need OCR, we can use the faster PyPdfium backend instead of Tesseract
-                )
-            }
-        )
-    return _converter
+    this module shouldn't pay that cost.
+    """
+    # Custom Docling pipeline configuration for PDF conversion
+    pipeline_opts = PdfPipelineOptions()
+    pipeline_opts.do_ocr = False
+    pipeline_opts.do_table_structure = True
+    pipeline_opts.table_structure_options.mode = (
+        TableFormerMode.FAST
+    )  # reduced runtime by 2x compared to accurate mode,similar output quality
+    # since we pay the price of vision refinement anyways at least we have speed
+    return DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=pipeline_opts,
+                backend=PyPdfiumDocumentBackend,  # since we don't need OCR, we can use the faster PyPdfium backend instead of Tesseract
+            )
+        }
+    )
 
 
 _CTRL_RE = re.compile(

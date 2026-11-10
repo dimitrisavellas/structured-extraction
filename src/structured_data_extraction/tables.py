@@ -24,6 +24,7 @@ extraction sees a regular grid.
 
 import base64
 import concurrent.futures
+import functools
 import json
 import logging
 import os
@@ -31,8 +32,10 @@ import re
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
+
 import fitz
 from openai import OpenAI
+
 from . import config
 
 logger = logging.getLogger(__name__)
@@ -55,7 +58,8 @@ def _keyword_score(text):
 
 def _pipe_stats(content):
     """Return (ragged, sparsity, hierarchy, ncols, merges) for a pipe-delimited table,
-    or None if the content has no pipe rows."""
+    or None if the content has no pipe rows.
+    """
     pipe_rows = [line for line in content.split("\n") if "|" in line]
     if not pipe_rows:
         return None
@@ -156,20 +160,12 @@ TABLE_TEXT_PROMPT = (
 def strip_code_fence(text):
     """Strip a code fence from the start and end of a string, if present."""
     text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
-    text = re.sub(r"\n?```$", "", text)
-    return text
+    return re.sub(r"\n?```$", "", text)
 
 
-_ollama_client = None
-
-
+@functools.cache
 def _client():
-    global _ollama_client
-    if _ollama_client is None:
-        _ollama_client = OpenAI(
-            base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"]
-        )
-    return _ollama_client
+    return OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"])
 
 
 def _call_model(model, messages):
@@ -276,7 +272,7 @@ def process_tables(sections_path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if out_path.exists() and not config.FORCE:
-        logger.info(f"Skipping tables — already exists")
+        logger.info("Skipping tables — already exists")
         return json.loads(out_path.read_text(encoding="utf-8"))
 
     sections = json.loads(sections_path.read_text(encoding="utf-8"))
@@ -375,10 +371,12 @@ def refine_symbol_only_tables(tables_path, pdf_path=None):
 
 def refine_matched_tables(tables_path, matched_section_indices, pdf_path=None):
     """Refine matched tables using the vision model, updating the JSON file in place.
+
     Arguments:
     tables_path: Path to the JSON file containing table sections.
     matched_section_indices: A set of section indices to refine.
     pdf_path: Optional path to the PDF file for rendering images.
+
     Returns:
     The updated list of table sections with refined HTML content.
     """

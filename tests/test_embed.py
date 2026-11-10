@@ -21,12 +21,12 @@ from structured_data_extraction.embed import (
 def test_load_model_caches():
     """Loading the same name twice hits the SentenceTransformer ctor once and reuses the object."""
     embed._model_cache.clear()
-    with patch("structured_data_extraction.embed.SentenceTransformer") as ST:
-        ST.side_effect = lambda name, **kw: f"model::{name}"
+    with patch("structured_data_extraction.embed.SentenceTransformer") as st_ctor:
+        st_ctor.side_effect = lambda name, **kw: f"model::{name}"
         m1 = _load_model("fake-model")
         m2 = _load_model("fake-model")
     assert m1 is m2
-    assert ST.call_count == 1
+    assert st_ctor.call_count == 1
 
 
 def test_expand_key():

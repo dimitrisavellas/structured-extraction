@@ -79,10 +79,28 @@ ignore = [
     "D100", "D104", "D105", "D107",  # no required module, package, magic-method, __init__ docstrings
     "ANN401",   # allow Any where a library gives untyped objects
 ]
-allowed-confusables = ["‐", "‑", "‒", "–", "−"]  # dash variants in text-normalization code
+allowed-confusables = ["‐", "‑", "‒", "–", "−", "µ"]  # dash variants and micro sign in text-normalization code
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "ANN"]
+# Phased adoption (2026-11): these files predate the strict rules.
+# To clean a file: remove its entry, fix what ruff reports. Do not add new entries.
+"src/structured_data_extraction/__init__.py" = ["D205"]
+"src/structured_data_extraction/classify.py" = ["ANN001", "ANN201", "ANN204", "D101", "D103", "D205", "E501"]
+"src/structured_data_extraction/config.py" = ["ANN001", "ANN202", "E501"]
+"src/structured_data_extraction/convert.py" = ["ANN001", "ANN201", "ANN202", "D103", "D205", "E501"]
+"src/structured_data_extraction/embed.py" = ["ANN001", "ANN201", "ANN202", "C901", "D103", "D205", "E501", "PLR0912", "PLR0913", "PLR0915", "PLR0917", "PLR1702"]
+"src/structured_data_extraction/extract.py" = ["ANN001", "ANN201", "ANN202", "D101", "D103", "D205", "D415", "E501", "PLR0913", "PLR0917", "PLR1702"]
+"src/structured_data_extraction/features.py" = ["ANN001", "ANN201", "ANN202", "E501"]
+"src/structured_data_extraction/filter_records.py" = ["ANN001", "ANN201", "ANN202", "D103", "D205", "PLR1702"]
+"src/structured_data_extraction/main.py" = ["ANN001", "ANN201", "ANN202", "C901", "D103", "D205", "D417", "PLR0912", "PLR0915"]
+"src/structured_data_extraction/matching.py" = ["ANN001", "ANN201", "ANN202", "C901", "D103"]
+"src/structured_data_extraction/paths.py" = ["ANN001", "ANN201", "D103", "D205"]
+"src/structured_data_extraction/rater.py" = ["ANN001", "ANN201", "ANN202", "D103", "D205", "E501"]
+"src/structured_data_extraction/records.py" = ["ANN001", "ANN201", "ANN202", "D103", "D205"]
+"src/structured_data_extraction/search.py" = ["ANN001", "ANN201", "ANN202", "D103"]
+"src/structured_data_extraction/tables.py" = ["ANN001", "ANN201", "ANN202", "ANN204", "C901", "D103", "D205", "E501", "PLR1702"]
+"src/structured_data_extraction/vocab.py" = ["ANN001", "ANN201", "ANN202", "D103"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

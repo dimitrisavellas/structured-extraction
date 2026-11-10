@@ -20,15 +20,16 @@ import time
 from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
-from . import config, records, filter_records, matching, rater
-from .paths import inter, read_json
-from .convert import convert_pdf
-from .vocab import extract_vocab
+
+from . import config, filter_records, matching, rater, records
 from .classify import classify_sections
-from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
+from .convert import convert_pdf
 from .embed import embed_sections_and_keys
-from .search import search
 from .extract import extract_parallel
+from .paths import inter, read_json
+from .search import search
+from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
+from .vocab import extract_vocab
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -164,11 +165,12 @@ def process_single_pdf(pdf_path, user_keys, user_schema=None):
 
 def _log_run_summary(stem, timings, results, matches):
     """End-of-run legibility: one line per stage with its wall-clock time, then a record count
-    broken down by the section type each record came from (table/text/list)."""
+    broken down by the section type each record came from (table/text/list).
+    """
     by_source, total = {}, 0
     for res in results:
-        for records in res.values():
-            for record in records:
+        for field_records in res.values():
+            for record in field_records:
                 total += 1
                 src = (record.get("metadata") or {}).get("section_type") or "unknown"
                 by_source[src] = by_source.get(src, 0) + 1
@@ -230,9 +232,10 @@ def finalize_outputs(levels=None):
 
 
 def _offer_filter(records_path, levels):
-    """user filter records by confidence at the end of a run. If confidence came in as an argument
+    """User filter records by confidence at the end of a run. If confidence came in as an argument
     (--levels) uses them, otherwise offers the interactive menu. One model means every record
-    is confidence 1.0, so there's nothing to filter and we bail."""
+    is confidence 1.0, so there's nothing to filter and we bail.
+    """
     if len(config.EXTRACTION_MODELS) < 2:
         return
     filter_records.run(records_path, levels=levels)
@@ -266,7 +269,8 @@ def process_batch(pdf_dir, user_keys, user_schema=None):
 def _dump_templates(dest):
     """Copy the packaged prompt templates to `dest` for editing, then the user points
     TEMPLATES_DIR at that folder to use them. Only the built-in .j2 defaults are written;
-    read_text/write_text keeps this working even if the package is imported from a zip."""
+    read_text/write_text keeps this working even if the package is imported from a zip.
+    """
     src = resources.files("structured_data_extraction") / "templates"
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)

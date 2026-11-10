@@ -14,9 +14,11 @@ Results are cached to matches.json and reused on reruns unless --force is set.
 
 import argparse
 import logging
+
 import numpy as np
+
 from . import config
-from .paths import inter, read_json, cached
+from .paths import cached, inter, read_json
 
 logger = logging.getLogger(__name__)
 

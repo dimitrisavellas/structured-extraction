@@ -19,6 +19,7 @@ validate_keys (trust-boundary cleaning of user input).
 import logging
 import re
 import unicodedata
+
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
@@ -153,7 +154,4 @@ _META_FIELDS = {"metadata", "confidence", "models"}
 
 def same_fact(a, b):
     fields = (set(a) | set(b)) - _META_FIELDS
-    for f in fields:
-        if compare(f, a.get(f), b.get(f)) == MISMATCH:
-            return False
-    return True
+    return all(compare(f, a.get(f), b.get(f)) != MISMATCH for f in fields)

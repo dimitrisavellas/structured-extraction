@@ -14,9 +14,11 @@ configurable via VOCAB_TOP_N and VOCAB_MAX_NGRAM in .env.
 import argparse
 import logging
 from pathlib import Path
+
 import yake
+
 from . import config
-from .paths import inter, cached
+from .paths import cached, inter
 
 logger = logging.getLogger(__name__)
 

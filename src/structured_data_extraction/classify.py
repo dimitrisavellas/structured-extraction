@@ -14,11 +14,14 @@ inside the package under models/section_classifier/.
 """
 
 import argparse
+import functools
 import json
 import logging
 from collections import Counter
 from pathlib import Path
+
 import joblib
+
 from . import config
 from .features import build_features, context_rows
 
@@ -38,8 +41,7 @@ class SectionClassifier:
         self.dl_idx = {c: i for i, c in enumerate(self.dl_cats)}
 
     def classify(self, chunks):
-        """
-        Predict a section type (table, text, list, ...) for each chunk.
+        """Predict a section type (table, text, list, ...) for each chunk.
 
         Each chunk is a dict with "section_id", "docling_label", and "text";
         "page" and "bbox" are passed through if present.
@@ -48,25 +50,19 @@ class SectionClassifier:
         if not chunks:
             return []
         ordered, rows = context_rows(chunks, text_key="text")
-        X = build_features(rows, self.dl_idx, self.word_vec, self.char_vec, fit=False)
-        preds = self.rf.predict(X)
-        return [dict(c, section_type=str(p)) for c, p in zip(ordered, preds)]
+        features = build_features(rows, self.dl_idx, self.word_vec, self.char_vec, fit=False)
+        preds = self.rf.predict(features)
+        return [dict(c, section_type=str(p)) for c, p in zip(ordered, preds, strict=True)]
 
 
-_classifier = None
-
-
+@functools.cache
 def get_classifier():
     """Load the ~89 MB random forest + its vectorizers once and reuse across PDFs."""
-    global _classifier
-    if _classifier is None:
-        _classifier = SectionClassifier()
-    return _classifier
+    return SectionClassifier()
 
 
 def classify_sections(pdf_stem):
-    """
-    Disk wrapper around SectionClassifier.classify for the batch pipeline.
+    """Disk wrapper around SectionClassifier.classify for the batch pipeline.
     Reads {stem}_items.json, runs the items with text through classify(),
     and writes {stem}_sections.json (skips if it already exists).
 

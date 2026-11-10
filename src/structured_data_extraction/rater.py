@@ -12,10 +12,12 @@ Outputs:
 
 from collections import defaultdict
 from pathlib import Path
+
 from sklearn.metrics import cohen_kappa_score
+
 from . import config
+from .matching import _META_FIELDS, _empty, model_slug, same_fact
 from .paths import read_json, write_json
-from .matching import same_fact, _empty, _META_FIELDS, model_slug
 
 
 def _filled_fields(rec):
@@ -43,8 +45,7 @@ def fuse(records_by_model):
 
 
 def _best_section(records: list[dict]) -> str:
-    """
-    Return the highest-priority section_type found across the records.
+    """Return the highest-priority section_type found across the records.
     Priority is table > text > list; an unknown/missing type loses to all of them.
 
     Arguments:
@@ -59,13 +60,12 @@ def _best_section(records: list[dict]) -> str:
 
 
 def _fused_metadata(records: list[dict]) -> dict:
-    """
-    Build the metadata for a fused record.
+    """Build the metadata for a fused record.
 
-    Arguments
+    Arguments:
     records: The records in one cluster, each a dict that may hold a "metadata" dict.
 
-    Returns
+    Returns:
     A metadata dict with "section_type" and "specified" (defaulting to True).
     """
     rep = max(records, key=_filled_fields)
@@ -78,7 +78,8 @@ def _fused_metadata(records: list[dict]) -> dict:
 def consensus(cluster, n_models):
     """Collapse a cluster (model -> record) into one fact: field values taken from the
     most-filled record, confidence = agreeing models / n_models, the sorted list of agreeing
-    models, and the fused metadata."""
+    models, and the fused metadata.
+    """
     recs = list(cluster.values())
     rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
@@ -112,8 +113,9 @@ def fuse_outputs(by_file, models):
     for stem, fields in sorted(by_file.items()):
         for field, recs_by_model in sorted(fields.items()):
             clusters = fuse({m: recs_by_model.get(m, []) for m in models})
-            for c in clusters:
-                facts.append({"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)})
+            facts.extend(
+                {"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)} for c in clusters
+            )
     return facts
 
 
@@ -166,7 +168,7 @@ def agreement(facts, models):
     rows = []
     for i, a in enumerate(models):
         for b in models[i + 1 :]:
-            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(facts)
+            agree = sum(x == y for x, y in zip(present[a], present[b], strict=True)) / len(facts)
             if len(set(present[a] + present[b])) < 2:
                 # cohen_kappa_score requires at least two label classes; skip if all labels are identical
                 kappa = None

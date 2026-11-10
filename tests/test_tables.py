@@ -28,7 +28,7 @@ def test_pipe_stats_simple_table():
 
 def test_pipe_stats_vertical_merge():
     # empty cell directly under a filled one in the same column -> a vertical merge
-    ragged, sparsity, hierarchy, ncols, merges = _pipe_stats("| A | B |\n| | C |\n| D | E |")
+    _ragged, sparsity, _hierarchy, _ncols, merges = _pipe_stats("| A | B |\n| | C |\n| D | E |")
     assert sparsity == pytest.approx(1 / 6)
     assert merges == pytest.approx(1 / 6)
 
