@@ -101,7 +101,9 @@ def test_normalize_key():
 def test_validate_keys_repairs():
     # surrounding quotes/whitespace stripped, blanks and exact dups dropped, order kept
     assert validate_keys(['"Net Income"', " Inventories ", "", "Net Income"]) == [
-        "Net Income", "Inventories"]
+        "Net Income",
+        "Inventories",
+    ]
 
 
 def test_validate_keys_rejects_empty_field_name():
@@ -125,10 +127,13 @@ def test_same_fact():
     assert same_fact({"value": "10"}, {"value": "10.0"}) is True
     assert same_fact({"value": "10 mm"}, {"value": "20 mm"}) is False
     # metadata fields are ignored
-    assert same_fact(
-        {"value": "A", "metadata": {"x": 1}},
-        {"value": "A", "metadata": {"x": 2}},
-    ) is True
+    assert (
+        same_fact(
+            {"value": "A", "metadata": {"x": 1}},
+            {"value": "A", "metadata": {"x": 2}},
+        )
+        is True
+    )
 
 
 def test_same_fact_all_empty_is_equal():

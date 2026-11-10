@@ -12,7 +12,9 @@ Each item becomes a row of:
 The regex feature vector length and order are fixed by the trained model — adding,
 removing, or reordering features requires retraining.
 """
+
 import re
+
 import numpy as np
 from scipy import sparse
 
@@ -24,7 +26,7 @@ BULLET_RE = re.compile(r"^[•●○▪►→■□◆◇★☆\-\*]\s*")
 # A lone leading "n" + space + non-space: docling sometimes mangles a "•" bullet into "n".
 N_BULLET_RE = re.compile(r"^n\s+\S")
 # Start of a figure/table caption: "Figure 1", "Fig. 2", "Table 3", "Tab. 4".
-FIG_RE = re.compile(r"^(Fig\.?|Figure|Table|Tab\.)\s*\d", re.I)
+FIG_RE = re.compile(r"^(Fig\.?|Figure|Table|Tab\.)\s*\d", re.IGNORECASE)
 # Characters that signal engineering/scientific units: ohm, micro (two code points), degree, plus-minus.
 UNITS = set("ΩμµΩ°±")
 
@@ -32,7 +34,9 @@ UNITS = set("ΩμµΩ°±")
 HASH_RE = re.compile(r"^(#{1,6})\s")
 # A caption label prefix like "Figure 1: " or "Table 3.2." Stripped before sentence counting
 # so the "1." in "Figure 1." isn't mistaken for a sentence boundary.
-FIG_TABLE_PREFIX_RE = re.compile(r"^(Figure|Fig\.|Table|Tab\.)\s+[A-Z0-9][A-Z0-9\-\.]*[\.\:]\s*", re.I)
+FIG_TABLE_PREFIX_RE = re.compile(
+    r"^(Figure|Fig\.|Table|Tab\.)\s+[A-Z0-9][A-Z0-9\-\.]*[\.\:]\s*", re.IGNORECASE
+)
 # A sentence boundary: lowercase/quote/paren, then ". ", then a capital letter.
 SENTENCE_BOUNDARY_RE = re.compile(r"[a-z\)\"\']\.\s+[A-Z]")
 # A numbered list item: "1." or "2)" at the start, then a space.
@@ -63,7 +67,7 @@ def regex_features(text):
     """
     n_sent = _sentence_count(text)
     words = text.split()
-    wc = max(len(words), 1)                                  # word count, floored at 1 to avoid /0
+    wc = max(len(words), 1)  # word count, floored at 1 to avoid /0
     n = len(text)
     letters = [c for c in text if c.isalpha()]
     upper_ratio = sum(c.isupper() for c in letters) / max(len(letters), 1)
@@ -72,36 +76,40 @@ def regex_features(text):
     # most words are Title Case scores high.
     title_words = sum(1 for w in words if len(w) > 1 and w[0].isupper() and w[1:].islower())
     hash_m = HASH_RE.match(text)
-    hash_depth = len(hash_m.group(1)) if hash_m else 0       # markdown heading level, 0 if none
+    hash_depth = len(hash_m.group(1)) if hash_m else 0  # markdown heading level, 0 if none
     return [
-        float("|" in text),                                  # has a pipe -> table row
-        float("\n" in text),                                 # spans multiple lines
-        float(text.count("\n") > 2),                         # has many lines -> list/table block
-        float(bool(NUM_LIST_RE.match(text))),                # starts "1." / "2)" -> numbered list
-        float(bool(BULLET_RE.match(text))),                  # starts with a bullet glyph
-        float(bool(N_BULLET_RE.match(text))),                # starts "n " -> mangled bullet
-        float(bool(DASH_RE.match(text))),                    # starts with a dash bullet
-        float(bool(FIG_RE.match(text))),                     # "Figure 1" / "Table 2" caption
-        float(n < 80), float(n < 40), float(n < 20),         # short / shorter / very short
-        float(text.endswith(".")),                           # ends with a period (sentence-like)
-        float(text.endswith(":")),                           # ends with a colon (label / lead-in)
-        float(text[-1] in ".:;?!") if text else 0.0,         # ends with terminal punctuation
-        float(text.count(".") <= 1),                         # at most one period 
-        float(bool(PAREN_RE.search(text))),                  # contains a short parenthetical
-        float(sum(1 for w in words[:3] if w.isupper() and len(w) > 1)),  # count of ALL-CAPS words in first 3
-        float(text.isupper() and any(c.isalpha() for c in text)),        # whole text is uppercase
-        upper_ratio,                                         # fraction of letters uppercase
-        title_words / wc,                                    # fraction of Title-Case words
-        float(text[0].isupper()) if text else 0.0,           # first character is uppercase
-        sum(c.isdigit() for c in text) / max(n, 1),          # digit density (table/spec signal)
-        float(any(c in UNITS for c in text)),                # contains a unit/symbol char
-        sum(len(w) for w in words) / wc,                     # mean word length
-        float(n),                                            # character length
-        float(wc),                                           # word count
-        float(hash_depth > 0),                               # is a markdown "# " heading
-        float(hash_depth) / 6.0,                             # heading depth, normalised to 0..1
-        float(n_sent == 1),                                  # single sentence
-        float(min(n_sent, 10)),                              # sentence count, capped at 10
+        float("|" in text),  # has a pipe -> table row
+        float("\n" in text),  # spans multiple lines
+        float(text.count("\n") > 2),  # has many lines -> list/table block
+        float(bool(NUM_LIST_RE.match(text))),  # starts "1." / "2)" -> numbered list
+        float(bool(BULLET_RE.match(text))),  # starts with a bullet glyph
+        float(bool(N_BULLET_RE.match(text))),  # starts "n " -> mangled bullet
+        float(bool(DASH_RE.match(text))),  # starts with a dash bullet
+        float(bool(FIG_RE.match(text))),  # "Figure 1" / "Table 2" caption
+        float(n < 80),
+        float(n < 40),
+        float(n < 20),  # short / shorter / very short
+        float(text.endswith(".")),  # ends with a period (sentence-like)
+        float(text.endswith(":")),  # ends with a colon (label / lead-in)
+        float(text[-1] in ".:;?!") if text else 0.0,  # ends with terminal punctuation
+        float(text.count(".") <= 1),  # at most one period
+        float(bool(PAREN_RE.search(text))),  # contains a short parenthetical
+        float(
+            sum(1 for w in words[:3] if w.isupper() and len(w) > 1)
+        ),  # count of ALL-CAPS words in first 3
+        float(text.isupper() and any(c.isalpha() for c in text)),  # whole text is uppercase
+        upper_ratio,  # fraction of letters uppercase
+        title_words / wc,  # fraction of Title-Case words
+        float(text[0].isupper()) if text else 0.0,  # first character is uppercase
+        sum(c.isdigit() for c in text) / max(n, 1),  # digit density (table/spec signal)
+        float(any(c in UNITS for c in text)),  # contains a unit/symbol char
+        sum(len(w) for w in words) / wc,  # mean word length
+        float(n),  # character length
+        float(wc),  # word count
+        float(hash_depth > 0),  # is a markdown "# " heading
+        float(hash_depth) / 6.0,  # heading depth, normalised to 0..1
+        float(n_sent == 1),  # single sentence
+        float(min(n_sent, 10)),  # sentence count, capped at 10
     ]
 
 
@@ -131,10 +139,10 @@ def build_features(data, dl_idx, word_vec, char_vec, fit):
     k = len(dl_idx)
     ctx = np.zeros((len(data), 3 * k + 1), dtype=np.float32)
     for i, r in enumerate(data):
-        ctx[i, dl_idx.get(r["dl"], 0)] = 1.0                 # this item's own docling label
-        ctx[i, k + dl_idx.get(r["prev"], 0)] = 1.0           # the previous item's label
-        ctx[i, 2 * k + dl_idx.get(r["next"], 0)] = 1.0       # the next item's label
-        ctx[i, 3 * k] = r["dist"]                            # items since the last section header
+        ctx[i, dl_idx.get(r["dl"], 0)] = 1.0  # this item's own docling label
+        ctx[i, k + dl_idx.get(r["prev"], 0)] = 1.0  # the previous item's label
+        ctx[i, 2 * k + dl_idx.get(r["next"], 0)] = 1.0  # the next item's label
+        ctx[i, 3 * k] = r["dist"]  # items since the last section header
     regex = sparse.csr_matrix([regex_features(t) for t in texts])
     return sparse.hstack([word, char, regex, sparse.csr_matrix(ctx)]).tocsr()
 
@@ -152,9 +160,21 @@ def context_rows(chunks, text_key="text"):
     rows = []
     for i, c in enumerate(chunks):
         # walk backwards from i to the nearest section_header; DIST_CAP if none is found
-        dist = next((min(i - b, DIST_CAP) for b in range(i, -1, -1)
-                     if chunks[b]["docling_label"] == "section_header"), DIST_CAP)
-        rows.append({"text": c.get(text_key, c.get("text", "")), "dl": c["docling_label"],
-                     "prev": chunks[i - 1]["docling_label"] if i > 0 else "",
-                     "next": chunks[i + 1]["docling_label"] if i < n - 1 else "", "dist": dist})
+        dist = next(
+            (
+                min(i - b, DIST_CAP)
+                for b in range(i, -1, -1)
+                if chunks[b]["docling_label"] == "section_header"
+            ),
+            DIST_CAP,
+        )
+        rows.append(
+            {
+                "text": c.get(text_key, c.get("text", "")),
+                "dl": c["docling_label"],
+                "prev": chunks[i - 1]["docling_label"] if i > 0 else "",
+                "next": chunks[i + 1]["docling_label"] if i < n - 1 else "",
+                "dist": dist,
+            }
+        )
     return chunks, rows

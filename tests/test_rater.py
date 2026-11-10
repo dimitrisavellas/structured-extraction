@@ -16,7 +16,9 @@ from structured_data_extraction.rater import (
 
 
 def test_filled_fields_counts_non_meta_nonempty():
-    assert _filled_fields({"value": "A", "unit": "mm", "metadata": {"x": 1}, "confidence": 0.9}) == 2
+    assert (
+        _filled_fields({"value": "A", "unit": "mm", "metadata": {"x": 1}, "confidence": 0.9}) == 2
+    )
     assert _filled_fields({"value": None, "unit": ""}) == 0
 
 
@@ -33,10 +35,12 @@ def test_fuse_matches_same_fact_across_models():
 
 
 def test_fuse_different_facts_remain_separate():
-    clusters = fuse({
-        "m1": [{"id": 1, "value": "A"}, {"id": 2, "value": "B"}],
-        "m2": [{"id": 1, "value": "A"}, {"id": 3, "value": "C"}],
-    })
+    clusters = fuse(
+        {
+            "m1": [{"id": 1, "value": "A"}, {"id": 2, "value": "B"}],
+            "m2": [{"id": 1, "value": "A"}, {"id": 3, "value": "C"}],
+        }
+    )
     # only m1/m2 id=1 are the same fact -> one shared cluster; the other two stand alone
     by_models = {frozenset(c): c for c in clusters}
     assert len(clusters) == 3
@@ -45,8 +49,12 @@ def test_fuse_different_facts_remain_separate():
 
 def test_best_section_priority():
     # table beats text beats list; missing type loses to all
-    assert _best_section([{"metadata": {"section_type": "text"}},
-                          {"metadata": {"section_type": "table"}}]) == "table"
+    assert (
+        _best_section(
+            [{"metadata": {"section_type": "text"}}, {"metadata": {"section_type": "table"}}]
+        )
+        == "table"
+    )
     assert _best_section([{"metadata": {}}, {"metadata": {}}]) == "unknown"
 
 
@@ -73,12 +81,16 @@ def test_consensus():
 
 def test_load_outputs(tmp_path):
     (tmp_path / "doc1_extraction_model1.json").write_text(
-        json.dumps({"field1": [{"value": "A"}]}), encoding="utf-8")
+        json.dumps({"field1": [{"value": "A"}]}), encoding="utf-8"
+    )
     (tmp_path / "doc1_extraction_model2.json").write_text(
-        json.dumps({"field1": [{"value": "A"}], "field2": [{"value": "B"}]}), encoding="utf-8")
+        json.dumps({"field1": [{"value": "A"}], "field2": [{"value": "B"}]}), encoding="utf-8"
+    )
 
-    with patch("structured_data_extraction.rater.config.EXTRACTION_MODELS", ["model1", "model2"]), \
-         patch("structured_data_extraction.rater.config.OUTPUT_DIR", str(tmp_path)):
+    with (
+        patch("structured_data_extraction.rater.config.EXTRACTION_MODELS", ["model1", "model2"]),
+        patch("structured_data_extraction.rater.config.OUTPUT_DIR", str(tmp_path)),
+    ):
         by_file = load_outputs()
 
     assert set(by_file["doc1"]) == {"field1", "field2"}
@@ -89,16 +101,27 @@ def test_fuse_outputs():
     by_file = {"doc1": {"field1": {"model1": [{"value": "A"}], "model2": [{"value": "A"}]}}}
     facts = fuse_outputs(by_file, ["model1", "model2"])
     assert len(facts) == 1
-    assert facts[0] == {"source_file": "doc1.pdf", "field": "field1", "value": "A",
-                        "confidence": 1.0, "models": ["model1", "model2"],
-                        "metadata": {"section_type": "unknown", "specified": True}}
+    assert facts[0] == {
+        "source_file": "doc1.pdf",
+        "field": "field1",
+        "value": "A",
+        "confidence": 1.0,
+        "models": ["model1", "model2"],
+        "metadata": {"section_type": "unknown", "specified": True},
+    }
 
 
 def test_fuse_outputs_single_model_is_passthrough():
-    by_file = {"doc1": {"noise": {"m1": [
-        {"differentiator": "", "value": "4"},
-        {"differentiator": "AD840J", "value": "4"},
-    ]}}}
+    by_file = {
+        "doc1": {
+            "noise": {
+                "m1": [
+                    {"differentiator": "", "value": "4"},
+                    {"differentiator": "AD840J", "value": "4"},
+                ]
+            }
+        }
+    }
     facts = fuse_outputs(by_file, ["m1"])
     assert len(facts) == 2
     assert all(f["confidence"] == 1.0 and f["models"] == ["m1"] for f in facts)
@@ -152,7 +175,7 @@ def test_rate(tmp_path):
     fused = json.loads((tmp_path / "fused.json").read_text(encoding="utf-8"))
     report = json.loads((tmp_path / "rating_report.json").read_text(encoding="utf-8"))
 
-    # fused is the complete view 
+    # fused is the complete view
     assert not (tmp_path / "user_report.json").exists()
     assert fused["doc1"]["field1"][0]["metadata"]["section_type"] == "table"
     assert fused["doc1"]["field2"][0]["value"] == "B"

@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- GitHub Actions CI: ruff check, ruff format check, and pytest on Python 3.11 and 3.12 for every pull request and push to `main`.
+- `uv.lock` and a `lint` dependency group pinning ruff; `uv sync --extra dev --group lint` sets up a dev environment.
+
+### Changed
+- Ruff config now lives in `pyproject.toml`. Existing files are exempt from the type-hint, docstring, line-length and complexity rules through an explicit per-file list; new files get every rule.
+- Code reformatted with `ruff format`, and the remaining lint findings fixed. No change in behaviour.
+
+### Removed
+- `requirements.txt`. `pyproject.toml` is the only dependency list.
+
 ## [0.2.1] - 2026-11-10
 
 ### Added
@@ -26,6 +39,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - First public release.
 
+[Unreleased]: https://github.com/dimitrisavellas/structured-extraction/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/dimitrisavellas/structured-extraction/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dimitrisavellas/structured-extraction/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dimitrisavellas/structured-extraction/releases/tag/v0.1.0

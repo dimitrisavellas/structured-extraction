@@ -59,6 +59,12 @@ cd structured-extraction
 pip install -e ".[dev]"
 ```
 
+Or with [uv](https://docs.astral.sh/uv/), which uses the committed `uv.lock`:
+
+```bash
+uv sync --extra dev --group lint
+```
+
 ## Configuration
 
 Create a `.env` in the directory you run the tool from (parent directories are searched too). Shell environment variables override it.
@@ -227,6 +233,19 @@ A `records.json` entry pairs provenance with the extracted fields, each a list o
 pip install -e ".[dev]"
 pytest
 ```
+
+The pip route does not install ruff. To lint without uv, run `pip install ruff==0.17.4`.
+
+With uv:
+
+```bash
+uv sync --extra dev --group lint
+uv run pytest
+uv run ruff check src tests
+uv run ruff format --check src tests
+```
+
+CI runs ruff and pytest (Python 3.11 and 3.12) on every pull request.
 
 ## License
 

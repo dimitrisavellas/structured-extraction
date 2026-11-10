@@ -9,12 +9,15 @@ Outputs:
   - rating_report.json: inter-rater agreement stats (Cohen's kappa and raw
     agreement percentage for each model pair).
 """
+
 from collections import defaultdict
 from pathlib import Path
+
 from sklearn.metrics import cohen_kappa_score
+
 from . import config
+from .matching import _META_FIELDS, _empty, model_slug, same_fact
 from .paths import read_json, write_json
-from .matching import same_fact, _empty, _META_FIELDS, model_slug
 
 
 def _filled_fields(rec):
@@ -42,8 +45,7 @@ def fuse(records_by_model):
 
 
 def _best_section(records: list[dict]) -> str:
-    """
-    Return the highest-priority section_type found across the records.
+    """Return the highest-priority section_type found across the records.
     Priority is table > text > list; an unknown/missing type loses to all of them.
 
     Arguments:
@@ -58,29 +60,35 @@ def _best_section(records: list[dict]) -> str:
 
 
 def _fused_metadata(records: list[dict]) -> dict:
-    """
-    Build the metadata for a fused record.
+    """Build the metadata for a fused record.
 
-    Arguments
+    Arguments:
     records: The records in one cluster, each a dict that may hold a "metadata" dict.
 
-    Returns
+    Returns:
     A metadata dict with "section_type" and "specified" (defaulting to True).
     """
     rep = max(records, key=_filled_fields)
-    return {"section_type": _best_section(records),
-            "specified": rep.get("metadata", {}).get("specified", True)}
+    return {
+        "section_type": _best_section(records),
+        "specified": rep.get("metadata", {}).get("specified", True),
+    }
 
 
 def consensus(cluster, n_models):
     """Collapse a cluster (model -> record) into one fact: field values taken from the
     most-filled record, confidence = agreeing models / n_models, the sorted list of agreeing
-    models, and the fused metadata."""
+    models, and the fused metadata.
+    """
     recs = list(cluster.values())
     rep = max(recs, key=_filled_fields)
     fields = {k: v for k, v in rep.items() if k != "metadata"}
-    return {"confidence": round(len(cluster) / n_models, 2), "models": sorted(cluster),
-            **fields, "metadata": _fused_metadata(recs)}
+    return {
+        "confidence": round(len(cluster) / n_models, 2),
+        "models": sorted(cluster),
+        **fields,
+        "metadata": _fused_metadata(recs),
+    }
 
 
 def load_outputs():
@@ -105,8 +113,9 @@ def fuse_outputs(by_file, models):
     for stem, fields in sorted(by_file.items()):
         for field, recs_by_model in sorted(fields.items()):
             clusters = fuse({m: recs_by_model.get(m, []) for m in models})
-            for c in clusters:
-                facts.append({"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)})
+            facts.extend(
+                {"source_file": f"{stem}.pdf", "field": field, **consensus(c, n)} for c in clusters
+            )
     return facts
 
 
@@ -114,8 +123,9 @@ def _group_by_doc(facts):
     grouped = defaultdict(lambda: defaultdict(list))
     for f in facts:
         stem = Path(f["source_file"]).stem
-        grouped[stem][f["field"]].append({k: v for k, v in f.items()
-                                          if k not in ("source_file", "field")})
+        grouped[stem][f["field"]].append(
+            {k: v for k, v in f.items() if k not in ("source_file", "field")}
+        )
     # highest-confidence facts first within each key; stable, so ties keep fuse order
     for fields in grouped.values():
         for recs in fields.values():
@@ -127,13 +137,13 @@ def majority_cutoff(n):
     return n // 2 + 1
 
 
-def rate(by_file, models=None): 
+def rate(by_file, models=None):
     models = config.EXTRACTION_MODELS if models is None else models
     n = len(models)
     Path(config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     all_facts = fuse_outputs(by_file, models)
 
-    # fused.json = the end result 
+    # fused.json = the end result
     fused_path = Path(config.OUTPUT_DIR) / "fused.json"
     write_json(fused_path, _group_by_doc(all_facts))
 
@@ -157,8 +167,8 @@ def agreement(facts, models):
     present = {m: [1 if m in f["models"] else 0 for f in facts] for m in models}
     rows = []
     for i, a in enumerate(models):
-        for b in models[i + 1:]:
-            agree = sum(x == y for x, y in zip(present[a], present[b])) / len(facts)
+        for b in models[i + 1 :]:
+            agree = sum(x == y for x, y in zip(present[a], present[b], strict=True)) / len(facts)
             if len(set(present[a] + present[b])) < 2:
                 # cohen_kappa_score requires at least two label classes; skip if all labels are identical
                 kappa = None

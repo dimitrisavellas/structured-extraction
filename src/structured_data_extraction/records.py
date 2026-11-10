@@ -5,8 +5,10 @@ that records the source file, document type, which models were used (schema,
 vision, embedding), the user's original keys, and the normalised key mapping.
 The result is records.json.
 """
+
 import os
 from pathlib import Path
+
 from . import config, matching
 from .paths import inter, read_json, write_json
 
@@ -15,7 +17,8 @@ FUSED = Path(config.OUTPUT_DIR) / "fused.json"
 
 def _run(stem):
     """Load the run stamp extract.py wrote (extracted_at, user_keys) for the envelope's
-    provenance. Returns {} when it's missing so make_record falls back to its defaults."""
+    provenance. Returns {} when it's missing so make_record falls back to its defaults.
+    """
     path = inter(stem, "run.json")
     return read_json(path) if path.exists() else {}
 
@@ -27,7 +30,8 @@ def _document_type(stem):
 
 def make_record(stem, by_key):
     """Wrap one document's fused facts in a metadata envelope: a type tag, a timestamp, and
-    provenance (source file, document type, the models used, and the user's keys)."""
+    provenance (source file, document type, the models used, and the user's keys).
+    """
     run = _run(stem)
     return {
         "type": "ExtractionResult",
@@ -54,7 +58,8 @@ def build_records(path=FUSED):
 
 def write_records(output_dir):
     """Wrap every document's fused facts in a provenance envelope and write records.json.
-    Keeps all records; consumers filter by the `confidence` field (see filter_records.py)."""
+    Keeps all records; consumers filter by the `confidence` field (see filter_records.py).
+    """
     output_dir = Path(output_dir)
     envelopes = build_records(output_dir / "fused.json")
     out_path = output_dir / "records.json"

@@ -20,7 +20,9 @@ def test_cosine_similarity():
 
 
 def test_cosine_similarity_scale_invariant():
-    assert cosine_similarity(np.array([[2.0, 0.0]]), np.array([[5.0, 0.0]]))[0, 0] == pytest.approx(1.0)
+    assert cosine_similarity(np.array([[2.0, 0.0]]), np.array([[5.0, 0.0]]))[0, 0] == pytest.approx(
+        1.0
+    )
 
 
 def test_cosine_similarity_zero_vector_scores_zero():
@@ -66,7 +68,9 @@ def test_build_match_dict_truncates_preview():
 def test_select_hits_threshold_and_order():
     sims = np.array([0.9, 0.4, 0.7])
     sections = [{"type": "text"}] * 3
-    hits = _select_hits_for_key(sims, ["a", "b", "c"], sections, num_secs=3, rows=[], threshold=0.55)
+    hits = _select_hits_for_key(
+        sims, ["a", "b", "c"], sections, num_secs=3, rows=[], threshold=0.55
+    )
     # below-threshold hit dropped; remaining sorted by score descending
     assert [h["section_idx"] for h in hits] == [0, 2]
     assert [h["similarity"] for h in hits] == [0.9, 0.7]

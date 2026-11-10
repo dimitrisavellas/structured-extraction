@@ -1,8 +1,8 @@
-"""Path helpers and a simple JSON cache.
+"""Path helpers and a simple JSON cache."""
 
-"""
 import json
 from pathlib import Path
+
 from . import config
 
 
@@ -27,7 +27,8 @@ def write_json(path, obj):
 
 def cached(path, build):
     """Return the JSON at `path` if it exists, else `build()` then write + return it.
-    Recomputes regardless of an existing file when config.FORCE is set."""
+    Recomputes regardless of an existing file when config.FORCE is set.
+    """
     path = Path(path)
     if path.exists() and not config.FORCE:
         return read_json(path)

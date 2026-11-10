@@ -23,7 +23,9 @@ def test_get_item_text_list_item_gets_marker():
 def test_get_item_text_header_depth():
     # section_header depth comes from the docling level (default 2 when absent), title is always 1
     assert _get_item_text(SimpleNamespace(text="Sub"), "section_header", None) == "## Sub"
-    assert _get_item_text(SimpleNamespace(text="Deep", level=3), "section_header", None) == "### Deep"
+    assert (
+        _get_item_text(SimpleNamespace(text="Deep", level=3), "section_header", None) == "### Deep"
+    )
     assert _get_item_text(SimpleNamespace(text="Big"), "title", None) == "# Big"
 
 

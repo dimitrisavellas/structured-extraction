@@ -12,22 +12,26 @@ content stream that every downstream step (embedding, search, extraction) reads.
 The trained model (~89 MB: one joblib per vectoriser plus the forest) ships
 inside the package under models/section_classifier/.
 """
+
 import argparse
+import functools
 import json
 import logging
 from collections import Counter
 from pathlib import Path
+
 import joblib
+
 from . import config
 from .features import build_features, context_rows
 
 logger = logging.getLogger(__name__)
 
+
 # Section classifier is a random forest model trained on labeled sections from the Docling dataset.
-# It uses TF-IDF features of the text and character n-grams, as well as the Docling label of each section, 
+# It uses TF-IDF features of the text and character n-grams, as well as the Docling label of each section,
 # to predict the section type (table, text, list, etc)
 class SectionClassifier:
-
     def __init__(self, model_dir=None):
         d = Path(model_dir) if model_dir else Path(config.SECTION_CLASSIFIER_DIR)
         self.rf = joblib.load(d / "rf_classifier.joblib")
@@ -37,8 +41,7 @@ class SectionClassifier:
         self.dl_idx = {c: i for i, c in enumerate(self.dl_cats)}
 
     def classify(self, chunks):
-        """
-        Predict a section type (table, text, list, ...) for each chunk.
+        """Predict a section type (table, text, list, ...) for each chunk.
 
         Each chunk is a dict with "section_id", "docling_label", and "text";
         "page" and "bbox" are passed through if present.
@@ -47,25 +50,19 @@ class SectionClassifier:
         if not chunks:
             return []
         ordered, rows = context_rows(chunks, text_key="text")
-        X = build_features(rows, self.dl_idx, self.word_vec, self.char_vec, fit=False)
-        preds = self.rf.predict(X)
-        return [dict(c, section_type=str(p)) for c, p in zip(ordered, preds)]
+        features = build_features(rows, self.dl_idx, self.word_vec, self.char_vec, fit=False)
+        preds = self.rf.predict(features)
+        return [dict(c, section_type=str(p)) for c, p in zip(ordered, preds, strict=True)]
 
 
-_classifier = None
-
-
+@functools.cache
 def get_classifier():
     """Load the ~89 MB random forest + its vectorizers once and reuse across PDFs."""
-    global _classifier
-    if _classifier is None:
-        _classifier = SectionClassifier()
-    return _classifier
+    return SectionClassifier()
 
 
 def classify_sections(pdf_stem):
-    """
-    Disk wrapper around SectionClassifier.classify for the batch pipeline.
+    """Disk wrapper around SectionClassifier.classify for the batch pipeline.
     Reads {stem}_items.json, runs the items with text through classify(),
     and writes {stem}_sections.json (skips if it already exists).
 
@@ -110,23 +107,27 @@ def classify_sections(pdf_stem):
     for i, item in enumerate(items):
         if i in by_idx:
             chunk = by_idx[i]
-            sections.append({
-                "type": chunk["section_type"],
-                "content": chunk["text"],
-                "docling_label": chunk["docling_label"],
-                "page": chunk["page"],
-                "bbox": chunk["bbox"],
-                "section_idx": i,
-            })
+            sections.append(
+                {
+                    "type": chunk["section_type"],
+                    "content": chunk["text"],
+                    "docling_label": chunk["docling_label"],
+                    "page": chunk["page"],
+                    "bbox": chunk["bbox"],
+                    "section_idx": i,
+                }
+            )
         elif item.get("label") == "picture":
-            sections.append({
-                "type": "picture",
-                "content": "",
-                "docling_label": item.get("label"),
-                "page": item.get("page"),
-                "bbox": item.get("bbox"),
-                "section_idx": i,
-            })
+            sections.append(
+                {
+                    "type": "picture",
+                    "content": "",
+                    "docling_label": item.get("label"),
+                    "page": item.get("page"),
+                    "bbox": item.get("bbox"),
+                    "section_idx": i,
+                }
+            )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(sections, indent=2, ensure_ascii=False), encoding="utf-8")

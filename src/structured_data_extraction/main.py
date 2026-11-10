@@ -11,6 +11,7 @@ changes their key list between runs.
 After extraction, finalize_outputs() fuses the per-model results via rater.py,
 writes provenance records, and optionally filters by confidence tier.
 """
+
 import argparse
 import json
 import logging
@@ -19,15 +20,16 @@ import time
 from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
-from . import config, records, filter_records, matching, rater
-from .paths import inter, read_json
-from .convert import convert_pdf
-from .vocab import extract_vocab
+
+from . import config, filter_records, matching, rater, records
 from .classify import classify_sections
-from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
+from .convert import convert_pdf
 from .embed import embed_sections_and_keys
-from .search import search
 from .extract import extract_parallel
+from .paths import inter, read_json
+from .search import search
+from .tables import process_tables, refine_matched_tables, refine_symbol_only_tables
+from .vocab import extract_vocab
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -40,8 +42,14 @@ def _invalidate_stale_key_caches(stem, user_keys):
     if sorted(user_keys) == sorted(read_json(keys_path)):
         return
     logger.info(f"Keys changed; invalidating key-dependent caches for {stem}")
-    for name in ("key_embeddings.npy", "key_texts.json", "original_keys.json",
-                  "matches.json", "schema.json", "run.json"):
+    for name in (
+        "key_embeddings.npy",
+        "key_texts.json",
+        "original_keys.json",
+        "matches.json",
+        "schema.json",
+        "run.json",
+    ):
         p = inter(stem, name)
         if p.exists():
             p.unlink()
@@ -139,9 +147,7 @@ def process_single_pdf(pdf_path, user_keys, user_schema=None):
 
     # refine matched complex tables with vision model
     matched_idxs = {
-        match.get("section_idx", 0)
-        for key_matches in matches.values()
-        for match in key_matches
+        match.get("section_idx", 0) for key_matches in matches.values() for match in key_matches
     }
 
     if matched_idxs and tables_file.exists():
@@ -159,11 +165,12 @@ def process_single_pdf(pdf_path, user_keys, user_schema=None):
 
 def _log_run_summary(stem, timings, results, matches):
     """End-of-run legibility: one line per stage with its wall-clock time, then a record count
-    broken down by the section type each record came from (table/text/list)."""
+    broken down by the section type each record came from (table/text/list).
+    """
     by_source, total = {}, 0
     for res in results:
-        for records in res.values():
-            for record in records:
+        for field_records in res.values():
+            for record in field_records:
                 total += 1
                 src = (record.get("metadata") or {}).get("section_type") or "unknown"
                 by_source[src] = by_source.get(src, 0) + 1
@@ -225,9 +232,10 @@ def finalize_outputs(levels=None):
 
 
 def _offer_filter(records_path, levels):
-    """user filter records by confidence at the end of a run. If confidence came in as an argument
+    """User filter records by confidence at the end of a run. If confidence came in as an argument
     (--levels) uses them, otherwise offers the interactive menu. One model means every record
-    is confidence 1.0, so there's nothing to filter and we bail."""
+    is confidence 1.0, so there's nothing to filter and we bail.
+    """
     if len(config.EXTRACTION_MODELS) < 2:
         return
     filter_records.run(records_path, levels=levels)
@@ -261,7 +269,8 @@ def process_batch(pdf_dir, user_keys, user_schema=None):
 def _dump_templates(dest):
     """Copy the packaged prompt templates to `dest` for editing, then the user points
     TEMPLATES_DIR at that folder to use them. Only the built-in .j2 defaults are written;
-    read_text/write_text keeps this working even if the package is imported from a zip."""
+    read_text/write_text keeps this working even if the package is imported from a zip.
+    """
     src = resources.files("structured_data_extraction") / "templates"
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -286,19 +295,34 @@ def main():
     parser.add_argument("path", nargs="?", help="Path to a PDF file or a directory of PDFs")
     parser.add_argument("--keys", nargs="+", help="Keys to extract")
     parser.add_argument("--output", default=config.OUTPUT_DIR)
-    parser.add_argument("--force", action="store_true", help="Recompute every step, ignoring cached files")
-    parser.add_argument("--levels", nargs="+", metavar="LVL",
-                        help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
-                             "omit to be prompted after extraction")
-    parser.add_argument("--schema", metavar="FILE",
-                        help="Path to a JSON schema file (same format as intermediate/*_schema.json); "
-                             "skips schema discovery. Keys are derived from the schema, so --keys is optional")
-    parser.add_argument("--dump-templates", metavar="DIR",
-                        help="Write the built-in prompt templates to DIR for editing, then exit; "
-                             "point TEMPLATES_DIR at that folder to use your edits")
-    parser.add_argument("--local", action="store_true",
-                        help="Settings for small local models (e.g. 9B on Ollama): one "
-                             "extraction call per section, thinking off, 30-minute timeout")
+    parser.add_argument(
+        "--force", action="store_true", help="Recompute every step, ignoring cached files"
+    )
+    parser.add_argument(
+        "--levels",
+        nargs="+",
+        metavar="LVL",
+        help="confidence tiers to keep (e.g. 1.0 0.75, or 'all'); "
+        "omit to be prompted after extraction",
+    )
+    parser.add_argument(
+        "--schema",
+        metavar="FILE",
+        help="Path to a JSON schema file (same format as intermediate/*_schema.json); "
+        "skips schema discovery. Keys are derived from the schema, so --keys is optional",
+    )
+    parser.add_argument(
+        "--dump-templates",
+        metavar="DIR",
+        help="Write the built-in prompt templates to DIR for editing, then exit; "
+        "point TEMPLATES_DIR at that folder to use your edits",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Settings for small local models (e.g. 9B on Ollama): one "
+        "extraction call per section, thinking off, 30-minute timeout",
+    )
     args = parser.parse_args()
 
     if args.dump_templates:
@@ -319,7 +343,11 @@ def main():
             print(f"Schema file not found: {schema_path}")
             sys.exit(1)
         user_schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        if not isinstance(user_schema, dict) or "schema" not in user_schema or "document_type" not in user_schema:
+        if (
+            not isinstance(user_schema, dict)
+            or "schema" not in user_schema
+            or "document_type" not in user_schema
+        ):
             print("Schema file must contain 'document_type' and 'schema' keys")
             sys.exit(1)
 
@@ -351,7 +379,7 @@ def main():
         result = process_single_pdf(args.path, user_keys, user_schema=user_schema)
         if result:
             finalize_outputs(args.levels)
-            print(json.dumps(result, indent=2, ensure_ascii=False))  #document them well
+            print(json.dumps(result, indent=2, ensure_ascii=False))  # document them well
         else:
             print("Extraction failed.")
             sys.exit(1)

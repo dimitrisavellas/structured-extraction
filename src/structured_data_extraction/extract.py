@@ -16,20 +16,24 @@ Prompt templates (schema_discovery.j2 and extraction.j2) are Jinja files that
 ship inside the package. Users can override them by running
 `--dump-templates ./dir` and setting TEMPLATES_DIR to that directory.
 """
+
 import argparse
+import functools
 import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, List, Literal, Optional
+from typing import Any, Literal
+
 import instructor
-from jinja2 import Environment, ChoiceLoader, FileSystemLoader, PackageLoader
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, PackageLoader
 from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
+
 from . import config, matching
-from .paths import inter, read_json, write_json, cached
+from .paths import cached, inter, read_json, write_json
 from .tables import strip_code_fence
 
 logger = logging.getLogger(__name__)
@@ -56,15 +60,14 @@ class ValueRecord(BaseModel):
     unit: str = Field(default="", description="Unit of measurement")
     metadata: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
 
-_raw = None
 
-
+@functools.cache
 def _raw_client():
-    global _raw
-    if _raw is None:
-        _raw = OpenAI(base_url=os.environ["LLM_BASE_URL"], api_key=os.environ["LLM_API_KEY"],
-                      timeout=config.LLM_TIMEOUT)
-    return _raw
+    return OpenAI(
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ["LLM_API_KEY"],
+        timeout=config.LLM_TIMEOUT,
+    )
 
 
 def _get_client():
@@ -82,13 +85,16 @@ def _build_extraction_model(schema, user_keys):
     The model is handed to Instructor as the response_model.
     """
     # number is Optional so a model returning null (e.g. "volume": null) still validates
-    type_map = {"string": str, "number": Optional[float], "any": Any, "object": dict}
+    type_map = {"string": str, "number": float | None, "any": Any, "object": dict}
     # schema keys come straight from the LLM, which may not match normalize_key's casing
     # (e.g. it returns "PSRR" but normalize_key("PSRR") == "psrr"). Look up normalized so an
     # acronym field keeps its rich (differentiator/qualifier) schema instead of falling back
     # to the generic ValueRecord.
-    schema_by_norm = ({matching.normalize_key(k): v for k, v in schema.items()}
-                      if isinstance(schema, dict) else {})
+    schema_by_norm = (
+        {matching.normalize_key(k): v for k, v in schema.items()}
+        if isinstance(schema, dict)
+        else {}
+    )
     field_defs = {}
 
     for key in user_keys:
@@ -100,7 +106,10 @@ def _build_extraction_model(schema, user_keys):
 
         fields_spec = entry.get("fields")
         if not fields_spec:
-            field_defs[field_name] = (List[ValueRecord], Field(default_factory=list, description=description))
+            field_defs[field_name] = (
+                list[ValueRecord],
+                Field(default_factory=list, description=description),
+            )
             continue
 
         sub_fields = {
@@ -121,17 +130,24 @@ def _build_extraction_model(schema, user_keys):
                 default = "" if field_type is str else None
                 sub_fields[sub_name] = (field_type, Field(default=default, description=sub_desc))
             if sub_def.get("unit") and not has_unit_field:
-                sub_fields[f"{sub_name}_unit"] = (str, Field(default="", description=f"Unit for {sub_name}"))
+                sub_fields[f"{sub_name}_unit"] = (
+                    str,
+                    Field(default="", description=f"Unit for {sub_name}"),
+                )
 
         record_model = create_model(f"{field_name}_Record", **sub_fields)
-        field_defs[field_name] = (List[record_model], Field(default_factory=list, description=description))
+        field_defs[field_name] = (
+            list[record_model],
+            Field(default_factory=list, description=description),
+        )
 
     return create_model("ExtractionResult", **field_defs)
 
 
 def _merge_cleaned_tables(sections, tables):
     """Swap each table section's content for its vision-cleaned HTML and tag every
-    non-header section with the most recent preceding heading (nearest_header)."""
+    non-header section with the most recent preceding heading (nearest_header).
+    """
     table_by_idx = {table["section_idx"]: table for table in tables}
     merged = []
     last_header = ""
@@ -157,7 +173,8 @@ def _merge_cleaned_tables(sections, tables):
 
 def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
     """Render the matched sections into the prompt block: prefer full_content, prefix the nearest heading, and truncate long prose but
-    never tables."""
+    never tables.
+    """
     parts = []
     for i, section in enumerate(sections):
         sec_type = section.get("type", "unknown")
@@ -177,7 +194,8 @@ def _format_sections(sections, max_chars=MAX_SECTION_CHARS):
 
 def discover_schema(markdown_text, matched_sections, vocab, user_keys):
     """Ask the schema LLM for each key's field shape. Returns document_type, schema,
-    pulling document_type out of the response's document_type"""
+    pulling document_type out of the response's document_type
+    """
     template = jinja_env.get_template("schema_discovery.j2")
 
     section_content = _format_sections(matched_sections)
@@ -212,18 +230,34 @@ def discover_schema(markdown_text, matched_sections, vocab, user_keys):
     return "unknown", {}
 
 
-def extract_values(client, matched_sections, vocab, user_keys, schema,
-                   document_type="unknown", source_file="", model=None):
+def extract_values(
+    client,
+    matched_sections,
+    vocab,
+    user_keys,
+    schema,
+    document_type="unknown",
+    source_file="",
+    model=None,
+):
     """Run one extraction LLM through Instructor and return {field: [record dicts]}.
     Retries up to MAX_LLM_RETRIES; returns {} if every attempt fails.
-    With EXTRACT_PER_SECTION, makes one call per section and concatenates the records."""
+    With EXTRACT_PER_SECTION, makes one call per section and concatenates the records.
+    """
     if config.EXTRACT_PER_SECTION and len(matched_sections) > 1:
         # small local models loop when several tables repeat the same rows in one prompt
         merged, failed = {}, 0
         for section in matched_sections:
-            part = extract_values(client, [section], vocab, user_keys, schema,
-                                  document_type=document_type, source_file=source_file,
-                                  model=model)
+            part = extract_values(
+                client,
+                [section],
+                vocab,
+                user_keys,
+                schema,
+                document_type=document_type,
+                source_file=source_file,
+                model=model,
+            )
             failed += not part
             for field, records in part.items():
                 merged.setdefault(field, []).extend(records)
@@ -277,7 +311,8 @@ def extract_values(client, matched_sections, vocab, user_keys, schema,
 
 def _dedup_extraction(extraction):
     """Within each field, drop duplicate records, keeping the one from the highest-priority
-    section (table > text > list). Records are duplicates when all non-metadata fields match."""
+    section (table > text > list). Records are duplicates when all non-metadata fields match.
+    """
     deduped = {}
     for field, records in extraction.items():
         best = {}
@@ -290,7 +325,9 @@ def _dedup_extraction(extraction):
             if existing is None:
                 best[dedup_key] = record
             else:
-                old_priority = config.SECTION_TYPE_PRIORITY.get(existing.get("metadata", {}).get("section_type", "unknown"), 99)
+                old_priority = config.SECTION_TYPE_PRIORITY.get(
+                    existing.get("metadata", {}).get("section_type", "unknown"), 99
+                )
                 new_priority = config.SECTION_TYPE_PRIORITY.get(sec_type, 99)
                 if new_priority < old_priority:
                     best[dedup_key] = record
@@ -300,7 +337,8 @@ def _dedup_extraction(extraction):
 
 def _neighbor_line(sections, idx, side):
     """Return the adjacent line beside section `idx`: the last line of the previous section
-    or the first line of the next. Empty string if that neighbour is a header/table or out of bounds."""
+    or the first line of the next. Empty string if that neighbour is a header/table or out of bounds.
+    """
     j = idx - 1 if side == "prev" else idx + 1
     if not 0 <= j < len(sections):
         return ""
@@ -356,7 +394,8 @@ def _prepare_sections(stem):
 
 def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, doc_type):
     """Extract with one model, dedup, stamp each record with its model/doc_type, and write
-    output/<stem>_extraction_<slug>.json. Returns the cached file unchanged on a re-run."""
+    output/<stem>_extraction_<slug>.json. Returns the cached file unchanged on a re-run.
+    """
     slug = matching.model_slug(model_name)
     out_path = out_dir / f"{stem}_extraction_{slug}.json"
     if out_path.exists() and not config.FORCE:
@@ -364,8 +403,9 @@ def _run_one_model(model_name, stem, out_dir, unique, vocab, user_keys, schema, 
         return json.loads(out_path.read_text(encoding="utf-8"))
 
     client = _get_client()
-    extraction = extract_values(client, unique, vocab, user_keys, schema,
-                                doc_type, f"{stem}.pdf", model=model_name)
+    extraction = extract_values(
+        client, unique, vocab, user_keys, schema, doc_type, f"{stem}.pdf", model=model_name
+    )
 
     if not extraction:
         # extract_values returns {} only when every attempt failed; surface it as a failure
@@ -404,10 +444,13 @@ def extract_parallel(stem, user_keys, user_schema=None):
 
     models = config.EXTRACTION_MODELS
 
-
-    cached(inter(stem, "run.json"),
-           lambda: {"extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "user_keys": list(user_keys)})
+    cached(
+        inter(stem, "run.json"),
+        lambda: {
+            "extracted_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "user_keys": list(user_keys),
+        },
+    )
 
     md_text, vocab, unique = _prepare_sections(stem)
 
@@ -416,9 +459,16 @@ def extract_parallel(stem, user_keys, user_schema=None):
         write_json(inter(stem, "schema.json"), user_schema)
         logger.info("Using user-supplied schema (skipped schema discovery)")
     else:
-        disc = cached(inter(stem, "schema.json"),
-                      lambda: dict(zip(("document_type", "schema"),
-                                       discover_schema(md_text, unique, vocab, user_keys))))
+        disc = cached(
+            inter(stem, "schema.json"),
+            lambda: dict(
+                zip(
+                    ("document_type", "schema"),
+                    discover_schema(md_text, unique, vocab, user_keys),
+                    strict=True,
+                )
+            ),
+        )
         doc_type, schema = disc["document_type"], disc["schema"]
     logger.info(f"Schema: document_type='{doc_type}'")
 
@@ -427,7 +477,9 @@ def extract_parallel(stem, user_keys, user_schema=None):
     workers = max(1, min(int(os.environ["EXTRACTION_WORKERS"]), len(models)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type): m
+            pool.submit(
+                _run_one_model, m, stem, out_dir, unique, vocab, user_keys, schema, doc_type
+            ): m
             for m in models
         }
         for fut in as_completed(futures):
@@ -443,10 +495,14 @@ def extract_parallel(stem, user_keys, user_schema=None):
 
     if failures and not results:
         model_name, msg = failures[0]
-        logger.error(f"All {len(models)} extraction model(s) failed. First error — [{model_name}]: {msg}")
+        logger.error(
+            f"All {len(models)} extraction model(s) failed. First error — [{model_name}]: {msg}"
+        )
     elif failures:
-        logger.warning(f"Partial extraction: {len(results)}/{len(models)} models OK; "
-                       f"failed: {', '.join(m for m, _ in failures)}")
+        logger.warning(
+            f"Partial extraction: {len(results)}/{len(models)} models OK; "
+            f"failed: {', '.join(m for m, _ in failures)}"
+        )
     logger.info(f"Parallel extraction done: {len(results)}/{len(models)} succeeded")
     return results
 
@@ -460,8 +516,14 @@ def main():
     results = extract_parallel(args.stem, args.keys)
     for result in results:
         total = sum(len(records) for records in result.values())
-        model = next((rec.get("metadata", {}).get("model")
-                      for records in result.values() for rec in records), "?")
+        model = next(
+            (
+                rec.get("metadata", {}).get("model")
+                for records in result.values()
+                for rec in records
+            ),
+            "?",
+        )
         print(f"{model}: {total} records")
 
 

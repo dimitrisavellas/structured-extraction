@@ -13,45 +13,50 @@ Bounding boxes are stored in Docling's native BOTTOMLEFT coordinate origin.
 Any consumer that needs top-left origin (e.g. PyMuPDF rendering in tables.py)
 converts on read.
 """
+
 import argparse
+import functools
 import json
 import logging
 import re
 from pathlib import Path
-from docling.document_converter import DocumentConverter, PdfFormatOption
+
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
 from . import config
 
 logger = logging.getLogger(__name__)
 
-_converter = None
 
-
+@functools.cache
 def _get_converter():
     """Build the Docling converter on first use — it loads vision models, so importing
-    this module shouldn't pay that cost."""
-    global _converter
-    if _converter is None:
-        #Custom Docling pipeline configuration for PDF conversion
-        pipeline_opts = PdfPipelineOptions()
-        pipeline_opts.do_ocr = False
-        pipeline_opts.do_table_structure = True
-        pipeline_opts.table_structure_options.mode = TableFormerMode.FAST #reduced runtime by 2x compared to accurate mode,similar output quality
-                                                                          #since we pay the price of vision refinement anyways at least we have speed
-        _converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_opts,
-                    backend=PyPdfiumDocumentBackend, # since we don't need OCR, we can use the faster PyPdfium backend instead of Tesseract
-                )
-            }
-        )
-    return _converter
+    this module shouldn't pay that cost.
+    """
+    # Custom Docling pipeline configuration for PDF conversion
+    pipeline_opts = PdfPipelineOptions()
+    pipeline_opts.do_ocr = False
+    pipeline_opts.do_table_structure = True
+    pipeline_opts.table_structure_options.mode = (
+        TableFormerMode.FAST
+    )  # reduced runtime by 2x compared to accurate mode,similar output quality
+    # since we pay the price of vision refinement anyways at least we have speed
+    return DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=pipeline_opts,
+                backend=PyPdfiumDocumentBackend,  # since we don't need OCR, we can use the faster PyPdfium backend instead of Tesseract
+            )
+        }
+    )
 
 
-_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]") # control characters that break JSON and Markdown rendering
+_CTRL_RE = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f]"
+)  # control characters that break JSON and Markdown rendering
 
 
 def _scrub(text):
@@ -94,15 +99,17 @@ def _get_item_text(item, label, doc):
 
 
 def _get_bbox(item):
-    if not hasattr(item, 'prov') or not item.prov:
+    if not hasattr(item, "prov") or not item.prov:
         return None, None
     prov = item.prov[0]
     page = prov.page_no
     bbox = None
-    if hasattr(prov, 'bbox') and prov.bbox:
+    if hasattr(prov, "bbox") and prov.bbox:
         bbox = {
-            "l": prov.bbox.l, "t": prov.bbox.t,
-            "r": prov.bbox.r, "b": prov.bbox.b,
+            "l": prov.bbox.l,
+            "t": prov.bbox.t,
+            "r": prov.bbox.r,
+            "b": prov.bbox.b,
             "coord_origin": str(prov.bbox.coord_origin),
         }
     return page, bbox
@@ -133,14 +140,13 @@ def convert_pdf(pdf_path):
         # collect items from docling
         items = []
         for item, _ in doc.iterate_items():
-            label = str(item.label) if hasattr(item, 'label') else "unknown"
+            label = str(item.label) if hasattr(item, "label") else "unknown"
             text = _scrub(_get_item_text(item, label, doc))
             page, bbox = _get_bbox(item)
             items.append({"label": label, "text": text, "page": page, "bbox": bbox})
 
         out_items.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
 
-     
         logger.info(f"Saved markdown ({len(md_text)} chars) + {len(items)} items → {out_md}")
         return str(out_md)
 

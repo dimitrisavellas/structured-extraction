@@ -15,9 +15,11 @@ never merged.
 Also provides normalize_key (user key → valid Pydantic field name) and
 validate_keys (trust-boundary cleaning of user input).
 """
+
 import logging
 import re
 import unicodedata
+
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,7 @@ _NONALNUM_RE = re.compile(r"[^0-9a-z]+")
 def _numbers(value):
     return frozenset(round(float(x), 6) for x in _NUM_RE.findall(str(value).translate(_DASHES)))
 
+
 _SYNONYMS = {"typical": "typ", "minimum": "min", "maximum": "max"}
 
 
@@ -109,8 +112,10 @@ def validate_keys(keys):
         if not field:
             raise ValueError(f"key {k!r} has no letters or digits to form a field name — rename it")
         if field in by_field:
-            raise ValueError(f"keys {by_field[field]!r} and {k!r} both map to field name "
-                             f"{field!r} — make them distinct")
+            raise ValueError(
+                f"keys {by_field[field]!r} and {k!r} both map to field name "
+                f"{field!r} — make them distinct"
+            )
         by_field[field] = k
     return cleaned
 
@@ -139,7 +144,9 @@ def compare(name, a, b):
     numa, numb = _numbers(a), _numbers(b)
     if not (numa <= numb or numb <= numa):
         return MISMATCH
-    return MATCH if fuzz.token_set_ratio(_norm_text(a), _norm_text(b)) >= FUZZ_THRESHOLD else MISMATCH
+    return (
+        MATCH if fuzz.token_set_ratio(_norm_text(a), _norm_text(b)) >= FUZZ_THRESHOLD else MISMATCH
+    )
 
 
 _META_FIELDS = {"metadata", "confidence", "models"}
@@ -147,7 +154,4 @@ _META_FIELDS = {"metadata", "confidence", "models"}
 
 def same_fact(a, b):
     fields = (set(a) | set(b)) - _META_FIELDS
-    for f in fields:
-        if compare(f, a.get(f), b.get(f)) == MISMATCH:
-            return False
-    return True
+    return all(compare(f, a.get(f), b.get(f)) != MISMATCH for f in fields)
