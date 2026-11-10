@@ -234,6 +234,8 @@ pip install -e ".[dev]"
 pytest
 ```
 
+The pip route does not install ruff. To lint without uv, run `pip install ruff==0.17.4`.
+
 With uv:
 
 ```bash

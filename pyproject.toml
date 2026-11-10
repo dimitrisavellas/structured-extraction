@@ -12,7 +12,6 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Dimitrios Avellas", email = "dimitrisavellas8@gmail.com" }]
 
-# Mirrors requirements.txt.
 dependencies = [
     "docling==2.82.0",
     "docling-core==2.70.2",

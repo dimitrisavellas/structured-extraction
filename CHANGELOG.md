@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Ruff config now lives in `pyproject.toml`. Existing files are exempt from the type-hint, docstring, line-length and complexity rules through an explicit per-file list; new files get every rule.
 - Code reformatted with `ruff format`, and the remaining lint findings fixed. No change in behaviour.
 
+### Removed
+- `requirements.txt`. `pyproject.toml` is the only dependency list.
+
 ## [0.2.1] - 2026-11-10
 
 ### Added
